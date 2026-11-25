@@ -1,0 +1,446 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "Food menu category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 80, "pattern": "^[a-z0-9-]+$" },
+        "description": { "type": "string", "maxLength": 300 },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "displayOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "slug", "displayOrder", "isActive", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Restaurant food catalog item",
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "slug": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-z0-9-]+$" },
+        "description": { "type": "string", "maxLength": 1000 },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "images": { "type": "array" },
+        "sizes": { "type": "array" },
+        "addons": { "type": "array" },
+        "isPopular": { "type": "boolean" },
+        "isBestSeller": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "isOffer": { "type": "boolean" },
+        "offerLabel": { "type": "string", "maxLength": 60 },
+        "prepTimeMins": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "isDeleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["categoryId", "name", "slug", "description", "price", "images", "isActive", "isDeleted", "createdAt", "updatedAt"]
+    },
+    "FoodAvailability": {
+      "title": "FoodAvailability",
+      "description": "Daily food availability record keyed by productId and Asia/Dhaka date",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "isAvailable": { "type": "boolean" },
+        "unavailableMessage": { "type": "string", "maxLength": 300 },
+        "openTime": { "type": "string", "maxLength": 10 },
+        "closeTime": { "type": "string", "maxLength": 10 },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "date", "isAvailable", "unavailableMessage", "updatedAt"]
+    },
+    "RestaurantTable": {
+      "title": "RestaurantTable",
+      "description": "Restaurant dining table with cryptographic QR token versioning",
+      "type": "object",
+      "properties": {
+        "tableNumber": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "capacity": { "type": "number" },
+        "zone": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "enum": ["available", "occupied", "reserved", "inactive"] },
+        "isActive": { "type": "boolean" },
+        "qrTokenVersion": { "type": "number" },
+        "qrSignature": { "type": "string", "minLength": 10, "maxLength": 256 },
+        "activeOrderId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tableNumber", "name", "capacity", "status", "isActive", "qrTokenVersion", "qrSignature", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Non-sensitive user profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["customer"] },
+        "loyaltyPoints": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "UserPrivateInfo": {
+      "title": "UserPrivateInfo",
+      "description": "PII isolated user contact details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 200 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "defaultAddress": { "type": "string", "maxLength": 300 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "updatedAt"]
+    },
+    "Address": {
+      "title": "Address",
+      "description": "Saved customer delivery address",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "label": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "recipientName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "phone": { "type": "string", "minLength": 6, "maxLength": 25 },
+        "area": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "streetAddress": { "type": "string", "minLength": 3, "maxLength": 300 },
+        "instructions": { "type": "string", "maxLength": 200 },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "label", "recipientName", "phone", "area", "streetAddress", "isDefault", "createdAt"]
+    },
+    "StaffMember": {
+      "title": "StaffMember",
+      "description": "Staff RBAC record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "maxLength": 200 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "role": { "type": "string", "enum": ["super_admin", "manager", "cashier", "chef", "delivery"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "name", "role", "isActive", "createdAt", "updatedAt"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer food order across delivery, pickup, and QR dine-in",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string", "minLength": 3, "maxLength": 40 },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "customerPhone": { "type": "string", "minLength": 6, "maxLength": 30 },
+        "orderType": { "type": "string", "enum": ["delivery", "pickup", "dine_in"] },
+        "tableId": { "type": "string", "maxLength": 128 },
+        "tableNumber": { "type": "string", "maxLength": 20 },
+        "qrVerified": { "type": "boolean" },
+        "deliveryAddress": { "type": "string", "maxLength": 350 },
+        "deliveryArea": { "type": "string", "maxLength": 80 },
+        "pickupTime": { "type": "string", "maxLength": 40 },
+        "instructions": { "type": "string", "maxLength": 400 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "couponCode": { "type": "string", "maxLength": 40 },
+        "deliveryCharge": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "bkash", "nagad", "rocket", "card"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid", "failed", "refunded"] },
+        "paymentRef": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "preparing", "ready", "out_for_delivery", "delivered", "completed", "cancelled"] },
+        "kitchenStatus": { "type": "string", "enum": ["queued", "cooking", "ready", "served"] },
+        "inventoryDeducted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderNumber", "userId", "customerName", "customerPhone", "orderType", "items", "subtotal", "discountAmount", "deliveryCharge", "totalAmount", "paymentMethod", "paymentStatus", "status", "kitchenStatus", "inventoryDeducted", "createdAt", "updatedAt"]
+    },
+    "Reservation": {
+      "title": "Reservation",
+      "description": "Restaurant table reservation",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "customerName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "customerPhone": { "type": "string", "minLength": 6, "maxLength": 30 },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "timeSlot": { "type": "string", "minLength": 4, "maxLength": 20 },
+        "guestCount": { "type": "number" },
+        "tableId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "tableNumber": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "specialRequests": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "rejected", "cancelled", "completed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "customerName", "customerPhone", "date", "timeSlot", "guestCount", "tableId", "tableNumber", "status", "createdAt", "updatedAt"]
+    },
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Ingredient stock record",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "unit": { "type": "string", "enum": ["kg", "g", "L", "ml", "pcs"] },
+        "currentStock": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "supplier": { "type": "string", "maxLength": 120 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "unit", "currentStock", "minStockAlert", "unitCost", "updatedAt"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "Product ingredient recipe for automatic inventory deduction",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "productName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "ingredients": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["productId", "productName", "ingredients", "updatedAt"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Audit trail of stock purchases, adjustments, and order deductions",
+      "type": "object",
+      "properties": {
+        "inventoryItemId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "ingredientName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "type": { "type": "string", "enum": ["purchase", "order_deduction", "adjustment", "waste"] },
+        "quantityDelta": { "type": "number" },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "note": { "type": "string", "maxLength": 300 },
+        "performedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["inventoryItemId", "ingredientName", "type", "quantityDelta", "performedBy", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Restaurant operational expense entry",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["ingredients", "utilities", "staff", "marketing", "maintenance", "other"] },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "minLength": 10, "maxLength": 10, "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "note": { "type": "string", "maxLength": 300 },
+        "recordedBy": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "amount", "date", "recordedBy", "createdAt"]
+    },
+    "Coupon": {
+      "title": "Coupon",
+      "description": "Discount coupon",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "minLength": 2, "maxLength": 30, "pattern": "^[A-Z0-9_-]+$" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "discountValue": { "type": "number" },
+        "minOrderValue": { "type": "number" },
+        "maxUses": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "expiresAt": { "type": "string", "maxLength": 40 },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "discountType", "discountValue", "minOrderValue", "maxUses", "usedCount", "expiresAt", "isActive", "createdAt", "updatedAt"]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer review for restaurant or dish",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorName": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "productId": { "type": "string", "maxLength": 128 },
+        "productName": { "type": "string", "maxLength": 120 },
+        "rating": { "type": "number" },
+        "comment": { "type": "string", "minLength": 3, "maxLength": 600 },
+        "status": { "type": "string", "enum": ["pending", "approved", "hidden"] },
+        "adminReply": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "authorName", "rating", "comment", "status", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real-time notification record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "type": { "type": "string", "enum": ["order", "reservation", "stock", "system"] },
+        "orderId": { "type": "string", "maxLength": 128 },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "type", "isRead", "createdAt"]
+    },
+    "WebsiteSetting": {
+      "title": "WebsiteSetting",
+      "description": "Dynamic restaurant CMS settings editable from Admin Dashboard",
+      "type": "object",
+      "properties": {
+        "restaurantName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "tagline": { "type": "string", "maxLength": 120 },
+        "logoUrl": { "type": "string", "maxLength": 500 },
+        "heroBannerUrl": { "type": "string", "maxLength": 500 },
+        "heroTitle": { "type": "string", "maxLength": 160 },
+        "heroSubtitle": { "type": "string", "maxLength": 400 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 120 },
+        "address": { "type": "string", "maxLength": 250 },
+        "openingHours": { "type": "string", "maxLength": 150 },
+        "deliveryChargeInsideDhaka": { "type": "number" },
+        "deliveryChargeOutsideDhaka": { "type": "number" },
+        "freeDeliveryThreshold": { "type": "number" },
+        "pickupEnabled": { "type": "boolean" },
+        "deliveryEnabled": { "type": "boolean" },
+        "dineInEnabled": { "type": "boolean" },
+        "aboutText": { "type": "string", "maxLength": 1000 },
+        "facebookUrl": { "type": "string", "maxLength": 250 },
+        "instagramUrl": { "type": "string", "maxLength": 250 },
+        "footerText": { "type": "string", "maxLength": 250 },
+        "termsText": { "type": "string", "maxLength": 3000 },
+        "privacyText": { "type": "string", "maxLength": 3000 },
+        "specialOfferBanner": { "type": "string", "maxLength": 200 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["restaurantName", "tagline", "heroTitle", "phone", "address", "openingHours", "deliveryChargeInsideDhaka", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable admin/staff action audit log",
+      "type": "object",
+      "properties": {
+        "actorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "actorEmail": { "type": "string", "maxLength": 200 },
+        "action": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "targetCollection": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "targetId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "summary": { "type": "string", "maxLength": 400 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorUid", "actorEmail", "action", "targetCollection", "targetId", "summary", "createdAt"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Super admin authorization record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 200 },
+        "name": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Public food categories managed by admin"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Permanent food catalog items"
+    },
+    "/availability/{availabilityId}": {
+      "schema": { "$ref": "#/entities/FoodAvailability" },
+      "description": "Daily food availability records keyed by productId_YYYY-MM-DD in Asia/Dhaka"
+    },
+    "/tables/{tableId}": {
+      "schema": { "$ref": "#/entities/RestaurantTable" },
+      "description": "Restaurant tables and active QR token versions"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Customer profile documents"
+    },
+    "/users/{userId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/UserPrivateInfo" },
+      "description": "Isolated PII document for user contact details"
+    },
+    "/users/{userId}/addresses/{addressId}": {
+      "schema": { "$ref": "#/entities/Address" },
+      "description": "Customer saved delivery addresses"
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Super admin records"
+    },
+    "/staff/{uid}": {
+      "schema": { "$ref": "#/entities/StaffMember" },
+      "description": "Staff RBAC directory"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Customer and dine-in orders"
+    },
+    "/reservations/{reservationId}": {
+      "schema": { "$ref": "#/entities/Reservation" },
+      "description": "Table reservations"
+    },
+    "/inventory/{itemId}": {
+      "schema": { "$ref": "#/entities/InventoryItem" },
+      "description": "Ingredient stock inventory"
+    },
+    "/recipes/{productId}": {
+      "schema": { "$ref": "#/entities/Recipe" },
+      "description": "Ingredient recipes per food item"
+    },
+    "/stockMovements/{movementId}": {
+      "schema": { "$ref": "#/entities/StockMovement" },
+      "description": "Stock adjustment and deduction ledger"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Restaurant expenses"
+    },
+    "/coupons/{couponId}": {
+      "schema": { "$ref": "#/entities/Coupon" },
+      "description": "Discount coupons"
+    },
+    "/reviews/{reviewId}": {
+      "schema": { "$ref": "#/entities/Review" },
+      "description": "Moderated customer reviews"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User and staff notifications"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/WebsiteSetting" },
+      "description": "Dynamic restaurant website CMS settings"
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Audit logs for admin and staff mutations"
+    }
+  }
+}

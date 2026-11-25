@@ -1,0 +1,8 @@
+{
+  "name": "FoodVista — Good Food • Good Mood",
+  "description": "Mobile-first restaurant management platform for Bangladesh supporting online home delivery, pickup, dine-in, QR table ordering, reservations, daily food availability, and full admin operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
