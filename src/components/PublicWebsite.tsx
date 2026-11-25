@@ -19,6 +19,7 @@ import {
   Trash2,
   User as UserIcon,
   UtensilsCrossed,
+  Volume2,
   X,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.tsx';
@@ -84,6 +85,10 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
     qrError,
     clearQrTable,
     showToast,
+    lang,
+    setLang,
+    t,
+    replayWelcomeAudio,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<PublicTab>('home');
@@ -327,14 +332,13 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
             {settings.restaurantName || 'FoodVista'}
           </button>
 
-          {/* Zone 2: Concise Single-Line Nav Links */}
+          {/* Zone 2: Concise Single-Line Nav Links (NO public Admin link) */}
           <nav className="hidden items-center gap-6 text-sm font-medium text-neutral-600 md:flex">
             {[
-              { id: 'home' as const, label: 'Home' },
-              { id: 'menu' as const, label: 'Menu' },
-              { id: 'reserve' as const, label: 'Reserve' },
-              { id: 'track' as const, label: 'Track Order' },
-              { id: 'account' as const, label: user ? 'Account' : 'Sign In' },
+              { id: 'menu' as const, label: t.navMenu },
+              { id: 'reserve' as const, label: t.navReserve },
+              { id: 'track' as const, label: t.navTrack },
+              { id: 'account' as const, label: user ? t.navAccount : t.navSignIn },
             ].map((item) => (
               <button
                 key={item.id}
@@ -349,26 +353,48 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                 {item.label}
               </button>
             ))}
-            {(isAdmin || staffRole) && (
-              <button
-                type="button"
-                onClick={onOpenAdmin}
-                className="whitespace-nowrap shrink-0 font-semibold text-[#F97316] hover:text-[#EA580C]"
-              >
-                Admin Panel
-              </button>
-            )}
           </nav>
 
-          {/* Zone 3: 1 Primary Action */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Zone 3: Language Switcher + Welcome Audio + Cart Action */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="inline-flex rounded-xl border border-neutral-200 bg-neutral-100 p-0.5 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                className={`rounded-lg px-2 py-1 transition-colors ${
+                  lang === 'en' ? 'bg-[#171717] text-white' : 'text-neutral-600 hover:text-[#171717]'
+                }`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('bn')}
+                className={`rounded-lg px-2 py-1 transition-colors ${
+                  lang === 'bn' ? 'bg-[#F97316] text-white' : 'text-neutral-600 hover:text-[#171717]'
+                }`}
+              >
+                বাংলা
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={replayWelcomeAudio}
+              title={t.replayWelcome}
+              aria-label={t.replayWelcome}
+              className="hidden h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 text-neutral-600 hover:border-[#F97316] hover:text-[#F97316] sm:inline-flex"
+            >
+              <Volume2 className="h-4 w-4" />
+            </button>
+
             <button
               type="button"
               onClick={() => setCartDrawerOpen(true)}
               className="inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-[#171717] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#F97316] whitespace-nowrap shrink-0 tabular-nums"
             >
               <ShoppingBag className="h-4 w-4" />
-              Cart · {cartCount}
+              {t.cartLabel} · {cartCount}
             </button>
           </div>
         </div>
@@ -433,14 +459,14 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search Kacchi biryani, burgers, pasta..."
+                      placeholder={t.searchPlaceholder}
                       className="w-full bg-transparent px-2 py-2 text-sm text-[#171717] placeholder:text-neutral-400 focus:outline-none"
                     />
                     <button
                       type="submit"
                       className="rounded-xl bg-[#F97316] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#EA580C] whitespace-nowrap shrink-0"
                     >
-                      Find Food
+                      {t.findFood}
                     </button>
                   </form>
 
@@ -450,7 +476,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                       onClick={() => setActiveTab('menu')}
                       className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#F97316] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#EA580C]"
                     >
-                      Explore Full Menu
+                      {t.exploreMenu}
                       <ChevronRight className="h-4 w-4" />
                     </button>
                     <button
@@ -458,7 +484,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                       onClick={() => setActiveTab('reserve')}
                       className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-neutral-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800"
                     >
-                      Reserve a Table
+                      {t.reserveTable}
                     </button>
                   </div>
                 </div>
@@ -491,11 +517,9 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
               <div className="flex items-end justify-between gap-4">
                 <div>
                   <h2 className="font-display text-2xl font-bold text-[#171717]">
-                    Browse by Category
+                    {t.browseCategories}
                   </h2>
-                  <p className="mt-1 text-sm text-neutral-500">
-                    Freshly prepared to order across five signature kitchens
-                  </p>
+                  <p className="mt-1 text-sm text-neutral-500">{t.categoriesSubtitle}</p>
                 </div>
                 <button
                   type="button"
@@ -505,7 +529,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                   }}
                   className="text-sm font-semibold text-[#F97316] hover:underline whitespace-nowrap"
                 >
-                  View all dishes
+                  {t.viewFullMenu}
                 </button>
               </div>
 
@@ -546,18 +570,16 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                 <div className="flex items-end justify-between gap-4">
                   <div>
                     <h2 className="font-display text-2xl font-bold text-[#171717]">
-                      Popular & Best-Selling Dishes
+                      {t.popularDishes}
                     </h2>
-                    <p className="mt-1 text-sm text-neutral-500">
-                      Live availability synced in real time with our Dhaka kitchen
-                    </p>
+                    <p className="mt-1 text-sm text-neutral-500">{t.popularSubtitle}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setActiveTab('menu')}
                     className="text-sm font-semibold text-[#F97316] hover:underline whitespace-nowrap"
                   >
-                    Full Menu
+                    {t.viewFullMenu}
                   </button>
                 </div>
 
@@ -580,7 +602,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
             {offerDishes.length > 0 && (
               <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6">
                 <h2 className="font-display text-2xl font-bold text-[#171717]">
-                  Chef Specials & Combos
+                  {t.specialOffersTitle}
                 </h2>
                 <p className="mt-1 text-sm text-neutral-500">
                   Featured seasonal pairings and combo savings
@@ -707,7 +729,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                   }
                   className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm focus:border-[#F97316] focus:outline-none"
                 >
-                  <option value="all">All Prices</option>
+                  <option value="all">{t.allPrices}</option>
                   <option value="under350">Under ৳350</option>
                   <option value="350to550">৳350 – ৳550</option>
                   <option value="over550">Above ৳550</option>
@@ -722,7 +744,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                       : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
                   }`}
                 >
-                  Available Today Only
+                  {t.availableOnly}
                 </button>
               </div>
             </div>
@@ -738,7 +760,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                     : 'border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
                 }`}
               >
-                All Categories
+                {t.allCategories}
               </button>
               {activeCategories.map((cat) => (
                 <button
@@ -989,9 +1011,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
         {/* ================= ORDER TRACKING PAGE ================= */}
         {activeTab === 'track' && (
           <section className="mx-auto max-w-4xl px-4 py-8 sm:px-6">
-            <h1 className="font-display text-2xl font-bold text-[#171717]">
-              Live Order Tracking
-            </h1>
+            <h1 className="font-display text-2xl font-bold text-[#171717]">{t.trackTitle}</h1>
             <p className="mt-1 text-sm text-neutral-500">
               Real-time kitchen & delivery updates
             </p>
@@ -1007,21 +1027,21 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#171717] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#F97316]"
                 >
                   <LogIn className="h-4 w-4" />
-                  Sign in with Google
+                  {t.signInGoogleCta}
                 </button>
               </div>
             ) : !activeOrder ? (
               <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-10 text-center">
                 <Package className="mx-auto h-10 w-10 text-neutral-300" />
                 <p className="mt-3 font-display text-lg font-bold text-[#171717]">
-                  No active orders yet
+                  {t.noOrdersYet}
                 </p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('menu')}
                   className="mt-4 rounded-xl bg-[#F97316] px-5 py-2.5 text-sm font-semibold text-white"
                 >
-                  Browse Menu
+                  {t.browseMenuBtn}
                 </button>
               </div>
             ) : (
@@ -1147,19 +1167,16 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                   <UserIcon className="h-7 w-7" />
                 </div>
                 <h1 className="mt-4 font-display text-2xl font-bold text-[#171717]">
-                  Sign in to FoodVista
+                  {t.signInBadge}
                 </h1>
-                <p className="mt-2 text-sm text-neutral-500">
-                  Manage your delivery addresses, track orders in real time, book tables, and share
-                  dish reviews.
-                </p>
+                <p className="mt-2 text-sm text-neutral-500">{t.signInSubheading}</p>
                 <button
                   type="button"
                   onClick={signInWithGoogle}
                   className="mt-6 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-[#171717] px-5 py-3 text-sm font-semibold text-white hover:bg-[#F97316]"
                 >
                   <LogIn className="h-4 w-4" />
-                  Continue with Google
+                  {t.signInGoogleCta}
                 </button>
               </div>
             ) : (
@@ -1172,6 +1189,14 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                     <p className="text-sm text-neutral-500">{user.email}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={replayWelcomeAudio}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:border-[#F97316] hover:text-[#F97316]"
+                    >
+                      <Volume2 className="h-4 w-4 text-[#F97316]" />
+                      {t.replayWelcome}
+                    </button>
                     <PWAInstallButton />
                     {(isAdmin || staffRole) && (
                       <button
@@ -1180,7 +1205,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                         className="inline-flex items-center gap-1.5 rounded-xl bg-[#F97316] px-4 py-2 text-xs font-semibold text-white hover:bg-[#EA580C]"
                       >
                         <Shield className="h-4 w-4" />
-                        Open Admin Dashboard
+                        {t.openDashboard}
                       </button>
                     )}
                     <button
@@ -1189,7 +1214,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                       className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-4 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
                     >
                       <LogOut className="h-4 w-4" />
-                      Sign Out
+                      {t.signOut}
                     </button>
                   </div>
                 </div>
@@ -1428,15 +1453,6 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
             >
               Privacy Policy
             </button>
-            {(isAdmin || staffRole) && (
-              <button
-                type="button"
-                onClick={onOpenAdmin}
-                className="font-semibold text-[#F97316] hover:underline"
-              >
-                Staff & Admin Dashboard
-              </button>
-            )}
           </div>
         </div>
       </footer>
@@ -1444,11 +1460,11 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
       {/* Mobile Bottom Navigation Bar (Compact <= 15% sticky height) */}
       <nav className="fixed bottom-0 left-0 right-0 z-40 grid h-14 grid-cols-5 border-t border-neutral-200 bg-white/95 backdrop-blur-md md:hidden">
         {[
-          { id: 'home' as const, label: 'Home', icon: Home },
-          { id: 'menu' as const, label: 'Menu', icon: UtensilsCrossed },
-          { id: 'reserve' as const, label: 'Reserve', icon: Calendar },
-          { id: 'track' as const, label: 'Track', icon: Package },
-          { id: 'account' as const, label: 'Account', icon: UserIcon },
+          { id: 'home' as const, label: t.navHome, icon: Home },
+          { id: 'menu' as const, label: t.navMenu, icon: UtensilsCrossed },
+          { id: 'reserve' as const, label: t.navReserve, icon: Calendar },
+          { id: 'track' as const, label: t.navTrack, icon: Package },
+          { id: 'account' as const, label: t.navAccount, icon: UserIcon },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;

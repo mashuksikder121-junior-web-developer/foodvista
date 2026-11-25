@@ -27,8 +27,11 @@ import {
   subscribeUserReservations,
   syncUserProfileOnSignIn,
 } from '../services/firestoreService.ts';
+import { speakWelcomeGreeting } from '../services/welcomeAudio.ts';
+import { TRANSLATIONS, type Language, type TranslationSet } from '../shared/i18n.ts';
 import { getDhakaDateString } from '../shared/timezone.ts';
 import type {
+  AdminTabId,
   CartItem,
   Category,
   CustomerAddress,
@@ -62,8 +65,14 @@ interface AppContextValue {
   authReady: boolean;
   isAdmin: boolean;
   staffRole: StaffRole | null;
+  staffPermissions: AdminTabId[];
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  replayWelcomeAudio: () => void;
+
+  lang: Language;
+  setLang: (lang: Language) => void;
+  t: TranslationSet;
 
   settings: WebsiteSetting;
   categories: Category[];
@@ -108,6 +117,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authReady, setAuthReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
+  const [staffPermissions, setStaffPermissions] = useState<AdminTabId[]>([]);
+  const [lang, setLangState] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.localStorage.getItem('foodvista_lang');
+      if (saved === 'bn' || saved === 'en') return saved;
+    }
+    return 'en';
+  });
+
+  const setLang = (nextLang: Language) => {
+    setLangState(nextLang);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('foodvista_lang', nextLang);
+    }
+  };
+
+  const t = useMemo(() => TRANSLATIONS[lang], [lang]);
 
   const [dbSettings, setDbSettings] = useState<WebsiteSetting | null>(null);
   const [dbCategories, setDbCategories] = useState<Category[]>([]);
@@ -135,7 +161,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const id = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     setToasts((prev) => [...prev.slice(-3), { id, type, text }]);
     setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
+      setToasts((prev) => prev.filter((item) => item.id !== id));
     }, 4200);
   };
 
@@ -150,21 +176,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  const isBootstrapAdmin = Boolean(
+    user && user.email === 'mashuksikder121@gmail.com' && user.emailVerified,
+  );
+
   // Auth listener
   useEffect(() => {
     return onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        await syncUserProfileOnSignIn(currentUser);
-        const roleInfo = await resolveUserRole(currentUser);
-        setIsAdmin(roleInfo.isAdmin);
-        setStaffRole(roleInfo.staffRole);
-        if (roleInfo.isAdmin) {
-          await seedInitialDatabaseIfEmpty(currentUser);
+        try {
+          const roleInfo = await resolveUserRole(currentUser);
+          setIsAdmin(roleInfo.isAdmin);
+          setStaffRole(roleInfo.staffRole);
+          setStaffPermissions(roleInfo.staffPermissions);
+        } catch (err) {
+          console.error('Role resolution error:', err);
+          setIsAdmin(false);
+          setStaffRole(null);
+          setStaffPermissions([]);
+        }
+        syncUserProfileOnSignIn(currentUser).catch((err) =>
+          console.warn('Profile sync skipped:', err),
+        );
+        if (currentUser.email === 'mashuksikder121@gmail.com' && currentUser.emailVerified) {
+          seedInitialDatabaseIfEmpty(currentUser).catch((err) =>
+            console.warn('Initial seed skipped:', err),
+          );
         }
       } else {
         setIsAdmin(false);
         setStaffRole(null);
+        setStaffPermissions([]);
       }
       setAuthReady(true);
     });
@@ -193,14 +236,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const unsubs = [
-      isAdmin ? subscribeAllOrders(setOrders) : subscribeUserOrders(user.uid, setOrders),
-      isAdmin
+      isBootstrapAdmin ? subscribeAllOrders(setOrders) : subscribeUserOrders(user.uid, setOrders),
+      isBootstrapAdmin
         ? subscribeAllReservations(setReservations)
         : subscribeUserReservations(user.uid, setReservations),
       subscribeUserAddresses(user.uid, setAddresses),
     ];
     return () => unsubs.forEach((u) => u());
-  }, [authReady, user, isAdmin]);
+  }, [authReady, user, isBootstrapAdmin]);
 
   // Real-time Socket.IO listener for instant cross-device notifications
   useEffect(() => {
@@ -315,10 +358,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.history.replaceState({}, '', url.toString());
   };
 
+  const replayWelcomeAudio = () => {
+    const name = user?.displayName || user?.email?.split('@')[0] || 'Guest';
+    speakWelcomeGreeting(name, lang);
+  };
+
   const signInWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleAuthProvider);
-      showToast('Signed in successfully.', 'success');
+      const cred = await signInWithPopup(auth, googleAuthProvider);
+      const guestName =
+        cred.user.displayName || cred.user.email?.split('@')[0] || 'Guest';
+      speakWelcomeGreeting(guestName, lang);
+      showToast(`${guestName}, welcome to our FoodVista!`, 'success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Sign-in cancelled.';
       showToast(msg, 'error');
@@ -397,8 +448,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         authReady,
         isAdmin,
         staffRole,
+        staffPermissions,
         signInWithGoogle,
         logout,
+        replayWelcomeAudio,
+        lang,
+        setLang,
+        t,
         settings,
         categories,
         products,

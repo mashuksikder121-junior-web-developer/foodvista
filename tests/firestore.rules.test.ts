@@ -40,6 +40,14 @@ describe('Firestore Security Rules & Blueprint Invariants', () => {
     expect(rules).toContain('allow update, delete: if false;');
   });
 
+  it('supports product videoUrl and strict active staff/termination controls in rules', () => {
+    expect(rules).toContain("'videoUrl'");
+    expect(rules).toContain("isOptStr(data, 'videoUrl', 500)");
+    expect(rules).toContain("data.status in ['active', 'suspended', 'terminated']");
+    expect(rules).toContain("'permissions'");
+    expect(rules).toContain("status == 'active'");
+  });
+
   it('keeps firebase-blueprint.json synchronized with core collections', () => {
     const requiredPaths = [
       '/categories/{categoryId}',

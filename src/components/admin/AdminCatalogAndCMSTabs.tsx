@@ -1,10 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Edit3,
+  Image as ImageIcon,
+  MapPin,
+  Phone,
   Plus,
   Save,
+  Shield,
   Trash2,
+  Upload,
+  UserX,
+  Video,
   X,
 } from 'lucide-react';
 import {
@@ -18,10 +25,14 @@ import {
 } from 'recharts';
 import { useApp } from '../../contexts/AppContext.tsx';
 import { FOOD_IMAGES } from '../../data/seedDefaults.ts';
+import { uploadMediaFile } from '../../services/apiClient.ts';
 import {
   createExpense,
+  DEFAULT_ROLE_PERMISSIONS,
   deleteCategory,
   deleteCoupon,
+  deleteStaffMember,
+  fetchRegisteredUsersForAdmin,
   moderateReview,
   saveCategory,
   saveCoupon,
@@ -29,9 +40,11 @@ import {
   saveStaffMember,
   saveWebsiteSettings,
   softDeleteProduct,
+  terminateStaffMember,
 } from '../../services/firestoreService.ts';
 import { formatBDT, getDhakaDateString } from '../../shared/timezone.ts';
 import type {
+  AdminTabId,
   AuditLog,
   Category,
   Coupon,
@@ -69,6 +82,9 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
   const [prodPrice, setProdPrice] = useState(350);
   const [prodDiscount, setProdDiscount] = useState<string>('');
   const [prodImage, setProdImage] = useState(FOOD_IMAGES.chickenBurger);
+  const [prodVideoUrl, setProdVideoUrl] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [prodOfferLabel, setProdOfferLabel] = useState('');
   const [prodPopular, setProdPopular] = useState(true);
   const [prodBestSeller, setProdBestSeller] = useState(false);
@@ -124,6 +140,7 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
     setProdPrice(p.price);
     setProdDiscount(p.discountPrice != null ? String(p.discountPrice) : '');
     setProdImage(p.images[0] || FOOD_IMAGES.chickenBurger);
+    setProdVideoUrl(p.videoUrl || '');
     setProdOfferLabel(p.offerLabel || '');
     setProdPopular(Boolean(p.isPopular));
     setProdBestSeller(Boolean(p.isBestSeller));
@@ -133,6 +150,38 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
     setProdAddonsText(
       (p.addons || []).map((a) => `${a.name}:${a.price}`).join(', '),
     );
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const uploaded = await uploadMediaFile(file);
+      setProdImage(uploaded.url);
+      showToast('Food photo uploaded successfully.', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Photo upload failed.', 'error');
+    } finally {
+      setUploadingPhoto(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const uploaded = await uploadMediaFile(file);
+      setProdVideoUrl(uploaded.url);
+      showToast('Dish video uploaded and attached.', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Video upload failed.', 'error');
+    } finally {
+      setUploadingVideo(false);
+      e.target.value = '';
+    }
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
@@ -157,6 +206,7 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
             ? discountNum
             : null,
         images: [prodImage.trim() || FOOD_IMAGES.chickenBurger],
+        videoUrl: prodVideoUrl.trim(),
         sizes: parseSizes(prodSizesText),
         addons: parseAddons(prodAddonsText),
         isPopular: prodPopular,
@@ -176,6 +226,7 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
     setProdDesc('');
     setProdDiscount('');
     setProdOfferLabel('');
+    setProdVideoUrl('');
     showToast('Food item published to live website.', 'success');
   };
 
@@ -276,13 +327,16 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="text-xs font-semibold">Food Image URL or Preset</label>
-            <div className="mt-1 flex gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold">
+              <ImageIcon className="h-3.5 w-3.5 text-[#F97316]" />
+              Food Photo (Upload from Device, URL, or Preset)
+            </label>
+            <div className="mt-1 flex flex-wrap gap-2">
               <input
                 type="text"
                 value={prodImage}
                 onChange={(e) => setProdImage(e.target.value)}
-                className="flex-1 rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+                className="min-w-[160px] flex-1 rounded-xl border border-neutral-200 px-3 py-2 text-xs"
               />
               <select
                 value={prodImage}
@@ -295,8 +349,65 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
                   </option>
                 ))}
               </select>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#171717] px-3 py-2 text-xs font-semibold text-white hover:bg-[#F97316]">
+                <Upload className="h-3.5 w-3.5" />
+                {uploadingPhoto ? 'Uploading...' : 'Upload Photo'}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
+              </label>
             </div>
           </div>
+        </div>
+
+        {/* Dish Video Upload / URL (Visible to Customers inside Dish Details) */}
+        <div className="rounded-xl border border-neutral-200 bg-[#F8FAFC] p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-[#171717]">
+              <Video className="h-4 w-4 text-[#F97316]" />
+              Dish Video (Customers can watch inside Dish Details)
+            </label>
+            {prodVideoUrl && (
+              <button
+                type="button"
+                onClick={() => setProdVideoUrl('')}
+                className="text-xs font-semibold text-[#DC2626] hover:underline"
+              >
+                Remove Video
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <input
+              type="text"
+              value={prodVideoUrl}
+              onChange={(e) => setProdVideoUrl(e.target.value)}
+              placeholder="Upload MP4/WebM video or paste video URL..."
+              className="min-w-[200px] flex-1 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs"
+            />
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#F97316] px-4 py-2 text-xs font-semibold text-white hover:bg-[#EA580C]">
+              <Upload className="h-3.5 w-3.5" />
+              {uploadingVideo ? 'Uploading Video...' : 'Upload Video'}
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime"
+                onChange={handleVideoUpload}
+                className="hidden"
+              />
+            </label>
+          </div>
+          {prodVideoUrl && (
+            <video
+              src={prodVideoUrl}
+              controls
+              playsInline
+              preload="metadata"
+              className="h-40 w-full max-w-sm rounded-xl bg-black object-cover"
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -385,7 +496,15 @@ export const AdminFoodAndCategoriesTab: React.FC = () => {
                           alt={p.name}
                           className="h-10 w-12 rounded-lg object-cover"
                         />
-                        <span className="font-semibold text-[#171717]">{p.name}</span>
+                        <div>
+                          <span className="font-semibold text-[#171717]">{p.name}</span>
+                          {p.videoUrl && (
+                            <span className="ml-2 inline-flex items-center gap-1 rounded bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-[#F97316]">
+                              <Video className="h-2.5 w-2.5" />
+                              Video
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-neutral-600">{cat?.name || 'Menu'}</td>
@@ -688,12 +807,40 @@ export const AdminCouponsAndReviewsTab: React.FC<{
   );
 };
 
+const CONTROL_OPTIONS: { id: AdminTabId; label: string }[] = [
+  { id: 'overview', label: 'Overview & KPIs' },
+  { id: 'availability', label: 'Daily Availability' },
+  { id: 'orders', label: 'Orders Management' },
+  { id: 'kds', label: 'Kitchen Display (KDS)' },
+  { id: 'tables', label: 'Tables & QR Codes' },
+  { id: 'catalog', label: 'Foods, Photos & Videos' },
+  { id: 'reservations', label: 'Table Reservations' },
+  { id: 'inventory', label: 'Inventory & Recipes' },
+  { id: 'coupons', label: 'Coupons & Reviews' },
+  { id: 'customers', label: 'Customers & Staff' },
+  { id: 'reports', label: 'Reports & Expenses' },
+  { id: 'settings', label: 'Website CMS' },
+];
+
 export const AdminCustomersAndStaffTab: React.FC<{ staff: StaffMember[] }> = ({ staff }) => {
   const { orders, showToast } = useApp();
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [uid, setUid] = useState('');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [photoUrl, setPhotoUrl] = useState('');
   const [role, setRole] = useState<StaffRole>('chef');
+  const [permissions, setPermissions] = useState<AdminTabId[]>(DEFAULT_ROLE_PERMISSIONS.chef);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [registeredUsers, setRegisteredUsers] = useState<
+    Array<{ uid: string; displayName: string; email: string; photoURL: string }>
+  >([]);
+
+  useEffect(() => {
+    void fetchRegisteredUsersForAdmin().then(setRegisteredUsers);
+  }, []);
 
   const customers = useMemo(() => {
     const map = new Map<
@@ -718,96 +865,424 @@ export const AdminCustomersAndStaffTab: React.FC<{ staff: StaffMember[] }> = ({ 
     return Array.from(map.values());
   }, [orders]);
 
-  const handleSaveStaff = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!uid.trim() || !email.trim() || !name.trim()) return;
-    await saveStaffMember({
-      uid: uid.trim(),
-      email: email.trim(),
-      name: name.trim(),
-      role,
-      isActive: true,
-    });
+  const handleRoleChange = (nextRole: StaffRole) => {
+    setRole(nextRole);
+    setPermissions(DEFAULT_ROLE_PERMISSIONS[nextRole] || []);
+  };
+
+  const togglePermission = (tabId: AdminTabId) => {
+    setPermissions((prev) =>
+      prev.includes(tabId) ? prev.filter((p) => p !== tabId) : [...prev, tabId],
+    );
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const res = await uploadMediaFile(file);
+      setPhotoUrl(res.url);
+      showToast('Staff photo uploaded.', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Photo upload failed.', 'error');
+    } finally {
+      setUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
+
+  const resetStaffForm = () => {
+    setEditingStaffId(null);
     setUid('');
     setEmail('');
     setName('');
-    showToast('Staff RBAC profile updated.', 'success');
+    setPhone('');
+    setAddress('');
+    setPhotoUrl('');
+    setRole('chef');
+    setPermissions(DEFAULT_ROLE_PERMISSIONS.chef);
+  };
+
+  const loadStaffForEdit = (m: StaffMember) => {
+    setEditingStaffId(m.id || m.uid || null);
+    setUid(m.uid || '');
+    setEmail(m.email);
+    setName(m.name);
+    setPhone(m.phone || '');
+    setAddress(m.address || '');
+    setPhotoUrl(m.photoUrl || '');
+    setRole(m.role);
+    setPermissions(
+      Array.isArray(m.permissions) && m.permissions.length > 0
+        ? m.permissions
+        : DEFAULT_ROLE_PERMISSIONS[m.role] || [],
+    );
+  };
+
+  const handleSaveStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !name.trim() || !phone.trim() || !address.trim()) {
+      showToast('Please fill Name, Phone, Email, and Address.', 'error');
+      return;
+    }
+    if (permissions.length === 0) {
+      showToast('Assign at least one web control permission to this staff member.', 'error');
+      return;
+    }
+    await saveStaffMember({
+      id: editingStaffId || undefined,
+      uid: uid.trim(),
+      email: email.trim().toLowerCase(),
+      name: name.trim(),
+      phone: phone.trim(),
+      address: address.trim(),
+      photoUrl: photoUrl.trim(),
+      role,
+      status: 'active',
+      permissions,
+      isActive: true,
+    });
+    resetStaffForm();
+    showToast('Staff profile & controls saved.', 'success');
   };
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="font-display text-2xl font-bold text-[#171717]">
-          Customers & Staff RBAC
+          Staff Registration, Access Controls & Customers
         </h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          Register staff with photo, contact details, designation, and exact module permissions — or
+          dismiss terminated staff anytime
+        </p>
       </div>
 
-      <div className="rounded-2xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="font-display text-lg font-bold text-[#171717]">
-          Staff Role-Based Access Control
-        </h2>
-        <form onSubmit={handleSaveStaff} className="grid grid-cols-1 gap-3 sm:grid-cols-5">
-          <input
-            type="text"
-            required
-            value={uid}
-            onChange={(e) => setUid(e.target.value)}
-            placeholder="Firebase User UID"
-            className="rounded-xl border border-neutral-200 px-3 py-2 text-xs font-mono"
-          />
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Staff Email"
-            className="rounded-xl border border-neutral-200 px-3 py-2 text-xs"
-          />
-          <input
-            type="text"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Full Name"
-            className="rounded-xl border border-neutral-200 px-3 py-2 text-xs"
-          />
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as StaffRole)}
-            className="rounded-xl border border-neutral-200 px-3 py-2 text-xs"
-          >
-            <option value="super_admin">Super Admin</option>
-            <option value="manager">Manager</option>
-            <option value="cashier">Cashier</option>
-            <option value="chef">Chef</option>
-            <option value="delivery">Delivery Staff</option>
-          </select>
+      {/* Staff Registration & Granular Permissions */}
+      <div className="rounded-2xl border border-neutral-200 bg-white p-6 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-bold text-[#171717]">
+            {editingStaffId ? 'Edit Staff Member & Controls' : 'Register New Staff Member'}
+          </h2>
+          {editingStaffId && (
+            <button
+              type="button"
+              onClick={resetStaffForm}
+              className="text-xs font-semibold text-neutral-500 hover:text-[#171717]"
+            >
+              Cancel Edit
+            </button>
+          )}
+        </div>
+
+        {registeredUsers.length > 0 && (
+          <div className="rounded-xl border border-neutral-200 bg-[#F8FAFC] p-3">
+            <label className="text-[11px] font-semibold text-neutral-600">
+              Quick Link Signed-In Google Account (Optional — auto-fills UID, Email & Name)
+            </label>
+            <select
+              value=""
+              onChange={(e) => {
+                const picked = registeredUsers.find((u) => u.uid === e.target.value);
+                if (picked) {
+                  setUid(picked.uid);
+                  if (picked.email) setEmail(picked.email);
+                  if (picked.displayName) setName(picked.displayName);
+                  if (picked.photoURL) setPhotoUrl(picked.photoURL);
+                }
+              }}
+              className="mt-1.5 w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-xs"
+            >
+              <option value="">— Select a signed-in user to auto-fill —</option>
+              {registeredUsers.map((u) => (
+                <option key={u.uid} value={u.uid}>
+                  {u.displayName} ({u.email || u.uid})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <form onSubmit={handleSaveStaff} className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div>
+              <label className="text-xs font-semibold text-[#171717]">Full Name *</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Hasan Mahmud"
+                className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#171717]">Phone Number *</label>
+              <input
+                type="tel"
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+880 17XX-XXXXXX"
+                className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#171717]">Google Gmail *</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="staff.member@gmail.com"
+                className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-[#171717]">Full Address *</label>
+              <input
+                type="text"
+                required
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="House 12, Road 4, Banani, Dhaka"
+                className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#171717]">Designation / Role *</label>
+              <select
+                value={role}
+                onChange={(e) => handleRoleChange(e.target.value as StaffRole)}
+                className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs font-semibold"
+              >
+                <option value="super_admin">Super Admin</option>
+                <option value="manager">Manager</option>
+                <option value="cashier">Cashier</option>
+                <option value="chef">Chef / Kitchen</option>
+                <option value="delivery">Delivery Rider</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-2">
+              <label className="text-xs font-semibold text-[#171717]">
+                Staff Photo (Upload or URL)
+              </label>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                {photoUrl && (
+                  <img
+                    src={photoUrl}
+                    alt="Staff preview"
+                    className="h-9 w-9 rounded-full border border-neutral-200 object-cover"
+                  />
+                )}
+                <input
+                  type="text"
+                  value={photoUrl}
+                  onChange={(e) => setPhotoUrl(e.target.value)}
+                  placeholder="Photo URL or upload image..."
+                  className="min-w-[160px] flex-1 rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+                />
+                <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl bg-[#171717] px-3 py-2 text-xs font-semibold text-white hover:bg-[#F97316]">
+                  <Upload className="h-3.5 w-3.5" />
+                  {uploadingAvatar ? 'Uploading...' : 'Upload Photo'}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#171717]">
+                Firebase UID (Optional)
+              </label>
+              <input
+                type="text"
+                value={uid}
+                onChange={(e) => setUid(e.target.value)}
+                placeholder="Auto-matched on email if blank"
+                className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Exact Web Controls Checkboxes */}
+          <div className="rounded-xl border border-neutral-200 bg-[#F8FAFC] p-4">
+            <p className="flex items-center gap-1.5 text-xs font-bold text-[#171717]">
+              <Shield className="h-3.5 w-3.5 text-[#F97316]" />
+              Assigned Website Controls ({permissions.length} selected)
+            </p>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {CONTROL_OPTIONS.map((opt) => {
+                const checked = permissions.includes(opt.id);
+                return (
+                  <label
+                    key={opt.id}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs font-medium transition-colors ${
+                      checked
+                        ? 'border-[#F97316] bg-orange-50 text-[#171717]'
+                        : 'border-neutral-200 bg-white text-neutral-600'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePermission(opt.id)}
+                    />
+                    <span className="truncate">{opt.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
           <button
             type="submit"
-            className="rounded-xl bg-[#171717] px-4 py-2 text-xs font-semibold text-white hover:bg-[#F97316]"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#F97316] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#EA580C]"
           >
-            Assign Staff Role
+            <Save className="h-4 w-4" />
+            {editingStaffId ? 'Update Staff Profile & Controls' : 'Register Staff Member'}
           </button>
         </form>
 
-        <div className="divide-y divide-neutral-100">
-          {staff.map((m) => (
-            <div key={m.uid} className="flex items-center justify-between py-2.5 text-xs">
-              <div>
-                <strong>{m.name}</strong> ({m.email}) ·{' '}
-                <span className="uppercase text-[#F97316] font-semibold">{m.role}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => void saveStaffMember({ ...m, isActive: !m.isActive })}
-                className={`rounded-lg px-2.5 py-1 font-semibold ${
-                  m.isActive ? 'bg-green-50 text-[#16A34A]' : 'bg-red-50 text-[#DC2626]'
-                }`}
-              >
-                {m.isActive ? 'Active' : 'Suspended'}
-              </button>
-            </div>
-          ))}
+        {/* Registered Staff Directory */}
+        <div className="divide-y divide-neutral-100 border-t border-neutral-100 pt-2">
+          {staff.length === 0 ? (
+            <p className="py-4 text-xs text-neutral-500">
+              No additional staff registered yet. Only the owner Gmail has access.
+            </p>
+          ) : (
+            staff.map((m) => {
+              const docId = m.id || m.uid || m.email;
+              const status = m.status || (m.isActive ? 'active' : 'suspended');
+              const isTerminated = status === 'terminated';
+              const perms = m.permissions || [];
+              return (
+                <div
+                  key={docId}
+                  className="flex flex-col justify-between gap-3 py-3.5 text-xs sm:flex-row sm:items-center"
+                >
+                  <div className="flex items-start gap-3">
+                    {m.photoUrl ? (
+                      <img
+                        src={m.photoUrl}
+                        alt={m.name}
+                        className="h-11 w-11 shrink-0 rounded-full border border-neutral-200 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#171717] font-display text-sm font-bold text-white">
+                        {m.name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong className="text-sm text-[#171717]">{m.name}</strong>
+                        <span className="font-semibold uppercase text-[#F97316]">
+                          {m.role.replace(/_/g, ' ')}
+                        </span>
+                        <span
+                          className={`font-semibold uppercase ${
+                            status === 'active'
+                              ? 'text-[#16A34A]'
+                              : status === 'terminated'
+                                ? 'text-[#DC2626]'
+                                : 'text-amber-600'
+                          }`}
+                        >
+                          · {status === 'terminated' ? 'Dismissed' : status}
+                        </span>
+                      </div>
+                      <p className="text-neutral-600">
+                        {m.email}
+                        {m.phone ? (
+                          <span className="ml-2 inline-flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-neutral-400" />
+                            {m.phone}
+                          </span>
+                        ) : null}
+                      </p>
+                      {m.address && (
+                        <p className="flex items-center gap-1 text-neutral-500">
+                          <MapPin className="h-3 w-3 shrink-0 text-neutral-400" />
+                          {m.address}
+                        </p>
+                      )}
+                      {!isTerminated && perms.length > 0 && (
+                        <p className="text-[11px] text-neutral-500">
+                          Controls: {perms.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => loadStaffForEdit(m)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2.5 py-1.5 font-semibold text-neutral-700 hover:bg-neutral-50"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                      Edit
+                    </button>
+                    {!isTerminated && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void saveStaffMember({
+                            ...m,
+                            id: docId,
+                            status: m.isActive ? 'suspended' : 'active',
+                            isActive: !m.isActive,
+                          })
+                        }
+                        className={`rounded-lg px-2.5 py-1.5 font-semibold ${
+                          m.isActive
+                            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'bg-green-50 text-[#16A34A] hover:bg-green-100'
+                        }`}
+                      >
+                        {m.isActive ? 'Suspend' : 'Reactivate'}
+                      </button>
+                    )}
+                    {!isTerminated ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await terminateStaffMember(docId, m.name);
+                          showToast(`${m.name} has been dismissed from service.`, 'info');
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg bg-[#DC2626] px-2.5 py-1.5 font-semibold text-white hover:bg-red-700"
+                      >
+                        <UserX className="h-3 w-3" />
+                        Dismiss
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await deleteStaffMember(docId, m.name);
+                          showToast(`Removed ${m.name} from directory.`, 'info');
+                        }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 font-semibold text-[#DC2626] hover:bg-red-50"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Delete Record
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 
@@ -1159,6 +1634,17 @@ export const AdminWebsiteSettingsTab: React.FC<{ auditLogs: AuditLog[] }> = ({ a
             />
           </div>
           <div>
+            <label className="text-xs font-semibold">Delivery Charge Outside Dhaka (৳)</label>
+            <input
+              type="number"
+              value={form.deliveryChargeOutsideDhaka || 0}
+              onChange={(e) =>
+                setForm({ ...form, deliveryChargeOutsideDhaka: Number(e.target.value) })
+              }
+              className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm tabular-nums"
+            />
+          </div>
+          <div>
             <label className="text-xs font-semibold">Free Delivery Threshold (৳)</label>
             <input
               type="number"
@@ -1169,6 +1655,28 @@ export const AdminWebsiteSettingsTab: React.FC<{ auditLogs: AuditLog[] }> = ({ a
               className="mt-1 w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm tabular-nums"
             />
           </div>
+          <div>
+            <label className="text-xs font-semibold">Hero Banner Image</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type="text"
+                value={form.heroBannerUrl || ''}
+                onChange={(e) => setForm({ ...form, heroBannerUrl: e.target.value })}
+                className="flex-1 rounded-xl border border-neutral-200 px-3 py-2 text-xs"
+              />
+              <select
+                value={form.heroBannerUrl || ''}
+                onChange={(e) => setForm({ ...form, heroBannerUrl: e.target.value })}
+                className="rounded-xl border border-neutral-200 px-2 py-2 text-xs"
+              >
+                {IMAGE_PRESETS.map((p) => (
+                  <option key={p.label} value={p.url}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="sm:col-span-2">
             <label className="text-xs font-semibold">About Restaurant</label>
             <textarea
@@ -1177,6 +1685,32 @@ export const AdminWebsiteSettingsTab: React.FC<{ auditLogs: AuditLog[] }> = ({ a
               onChange={(e) => setForm({ ...form, aboutText: e.target.value })}
               className="mt-1 w-full rounded-xl border border-neutral-200 p-3 text-sm"
             />
+          </div>
+          <div className="sm:col-span-2 flex flex-wrap gap-6 text-xs font-semibold text-[#171717]">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.deliveryEnabled ?? true}
+                onChange={(e) => setForm({ ...form, deliveryEnabled: e.target.checked })}
+              />
+              Home Delivery Enabled
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.pickupEnabled ?? true}
+                onChange={(e) => setForm({ ...form, pickupEnabled: e.target.checked })}
+              />
+              Customer Pickup Enabled
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={form.dineInEnabled ?? true}
+                onChange={(e) => setForm({ ...form, dineInEnabled: e.target.checked })}
+              />
+              QR Dine-in Enabled
+            </label>
           </div>
         </div>
 

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,9 @@ async function startServer() {
   const app = express();
   const httpServer = http.createServer(app);
 
+  const uploadsDir = path.resolve(__dirname, 'public/uploads');
+  fs.mkdirSync(uploadsDir, { recursive: true });
+
   const io = new SocketIOServer(httpServer, {
     cors: {
       origin: true,
@@ -31,6 +35,8 @@ async function startServer() {
     next();
   });
 
+  app.use('/uploads', express.static(uploadsDir));
+  app.use('/api/v1/media/upload', express.json({ limit: '25mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   // Mount REST API v1

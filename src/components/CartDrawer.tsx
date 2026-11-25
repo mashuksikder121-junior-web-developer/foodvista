@@ -28,6 +28,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
     qrTable,
     user,
     showToast,
+    t,
   } = useApp();
 
   const [orderType, setOrderType] = useState<OrderType>(qrTable ? 'dine_in' : 'delivery');
@@ -107,7 +108,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
           <div className="flex items-center gap-2.5">
             <ShoppingBag className="h-5 w-5 text-[#F97316]" />
             <h2 className="font-display text-lg font-bold text-[#171717]">
-              Your Order ({cart.reduce((s, i) => s + i.quantity, 0)})
+              {t.yourOrder} ({cart.reduce((s, i) => s + i.quantity, 0)})
             </h2>
           </div>
           <button
@@ -127,11 +128,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
                 <ShoppingBag className="h-8 w-8" />
               </div>
               <h3 className="mt-4 font-display text-lg font-bold text-[#171717]">
-                Your cart is empty
+                {t.emptyCartTitle}
               </h3>
-              <p className="mt-1 max-w-xs text-sm text-neutral-500">
-                Explore our freshly grilled burgers, Dhaka Kacchi biryani, and platters.
-              </p>
+              <p className="mt-1 max-w-xs text-sm text-neutral-500">{t.emptyCartDesc}</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -139,9 +138,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
               <div className="grid grid-cols-3 gap-1 rounded-xl bg-neutral-100 p-1">
                 {(['delivery', 'pickup', 'dine_in'] as OrderType[]).map((type) => {
                   const labels: Record<OrderType, string> = {
-                    delivery: 'Delivery',
-                    pickup: 'Pickup',
-                    dine_in: 'Dine-in',
+                    delivery: t.delivery,
+                    pickup: t.pickup,
+                    dine_in: t.dineIn,
                   };
                   const active = orderType === type;
                   return (
@@ -291,25 +290,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
           <div className="border-t border-neutral-200 bg-white p-5">
             <div className="space-y-1.5 text-sm tabular-nums">
               <div className="flex justify-between text-neutral-600">
-                <span>Subtotal</span>
+                <span>{t.subtotal}</span>
                 <span>{formatBDT(totals.subtotal)}</span>
               </div>
               {totals.discountAmount > 0 && (
                 <div className="flex justify-between text-[#16A34A]">
-                  <span>Discount</span>
+                  <span>{t.discount}</span>
                   <span>−{formatBDT(totals.discountAmount)}</span>
                 </div>
               )}
               {orderType === 'delivery' && (
                 <div className="flex justify-between text-neutral-600">
-                  <span>Delivery Charge</span>
+                  <span>{t.deliveryCharge}</span>
                   <span>
-                    {totals.deliveryCharge === 0 ? 'Free' : formatBDT(totals.deliveryCharge)}
+                    {totals.deliveryCharge === 0 ? t.freeLabel : formatBDT(totals.deliveryCharge)}
                   </span>
                 </div>
               )}
               <div className="flex justify-between border-t border-neutral-100 pt-2 font-display text-base font-bold text-[#171717]">
-                <span>Total</span>
+                <span>{t.totalLabel}</span>
                 <span>{formatBDT(totals.totalAmount)}</span>
               </div>
             </div>
@@ -323,7 +322,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onProceedToCheckout }) =
               }}
               className="mt-4 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-[#F97316] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#EA580C] disabled:cursor-not-allowed disabled:bg-neutral-300"
             >
-              Proceed to Checkout
+              {t.proceedCheckout}
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>

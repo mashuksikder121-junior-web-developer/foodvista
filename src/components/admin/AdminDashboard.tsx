@@ -6,6 +6,7 @@ import {
   ChefHat,
   ClipboardList,
   LayoutDashboard,
+  LogOut,
   Menu,
   PackageCheck,
   QrCode,
@@ -31,6 +32,7 @@ import { useApp } from '../../contexts/AppContext.tsx';
 import { subscribeAdminCollections } from '../../services/firestoreService.ts';
 import { formatBDT } from '../../shared/timezone.ts';
 import type {
+  AdminTabId,
   AuditLog,
   Coupon,
   Expense,
@@ -56,21 +58,7 @@ import {
 } from './AdminOperationsTabs.tsx';
 import { AdminTablesQRTab } from './AdminTablesQRTab.tsx';
 
-type AdminTab =
-  | 'overview'
-  | 'availability'
-  | 'orders'
-  | 'kds'
-  | 'tables'
-  | 'catalog'
-  | 'reservations'
-  | 'inventory'
-  | 'coupons'
-  | 'customers'
-  | 'reports'
-  | 'settings';
-
-const NAV_ITEMS: { id: AdminTab; label: string; icon: React.FC<{ className?: string }> }[] = [
+const NAV_ITEMS: { id: AdminTabId; label: string; icon: React.FC<{ className?: string }> }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'availability', label: 'Daily Availability', icon: PackageCheck },
   { id: 'orders', label: 'Orders', icon: ShoppingBag },
@@ -88,8 +76,21 @@ const NAV_ITEMS: { id: AdminTab; label: string; icon: React.FC<{ className?: str
 export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
   onBackToPublic,
 }) => {
-  const { user, isAdmin, orders, reservations, tables, products } = useApp();
-  const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const {
+    user,
+    isAdmin,
+    staffRole,
+    staffPermissions,
+    logout,
+    orders,
+    reservations,
+    tables,
+    products,
+    lang,
+    setLang,
+    t,
+  } = useApp();
+  const [activeTab, setActiveTab] = useState<AdminTabId>('overview');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -101,8 +102,26 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
+  const isBootstrapAdmin = Boolean(
+    user && user.email === 'mashuksikder121@gmail.com' && user.emailVerified,
+  );
+
+  const visibleNavItems = useMemo(
+    () =>
+      isBootstrapAdmin
+        ? NAV_ITEMS
+        : NAV_ITEMS.filter((item) => staffPermissions.includes(item.id)),
+    [isBootstrapAdmin, staffPermissions],
+  );
+
   useEffect(() => {
-    if (!user || !isAdmin) return;
+    if (visibleNavItems.length > 0 && !visibleNavItems.some((item) => item.id === activeTab)) {
+      setActiveTab(visibleNavItems[0].id);
+    }
+  }, [visibleNavItems, activeTab]);
+
+  useEffect(() => {
+    if (!user || !isBootstrapAdmin) return;
     const unsubs = subscribeAdminCollections({
       onInventory: setInventory,
       onRecipes: setRecipes,
@@ -114,7 +133,7 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
       onAuditLogs: setAuditLogs,
     });
     return () => unsubs.forEach((u) => u());
-  }, [user, isAdmin]);
+  }, [user, isBootstrapAdmin]);
 
   const metrics = useMemo(() => {
     const valid = orders.filter((o) => o.status !== 'cancelled');
@@ -192,7 +211,7 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {NAV_ITEMS.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           const active = activeTab === item.id;
           return (
@@ -223,7 +242,7 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-700 px-3 py-2.5 text-xs font-semibold text-white hover:bg-neutral-800"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Public Website
+          {t.backToStorefront}
         </button>
       </div>
     </div>
@@ -259,21 +278,57 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
               <Menu className="h-5 w-5" />
             </button>
             <span className="text-xs font-medium text-neutral-500">
-              Admin Console /{' '}
+              {t.adminConsole} /{' '}
               <strong className="text-[#171717]">
-                {NAV_ITEMS.find((n) => n.id === activeTab)?.label}
+                {visibleNavItems.find((n) => n.id === activeTab)?.label || 'Console'}
               </strong>
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={onBackToPublic}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 py-1.5 text-xs font-semibold text-[#171717] hover:bg-neutral-50 whitespace-nowrap"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            View Storefront
-          </button>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setLang('en')}
+                className={`rounded-md px-2 py-0.5 ${
+                  lang === 'en' ? 'bg-[#171717] text-white' : 'text-neutral-600'
+                }`}
+              >
+                EN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLang('bn')}
+                className={`rounded-md px-2 py-0.5 ${
+                  lang === 'bn' ? 'bg-[#F97316] text-white' : 'text-neutral-600'
+                }`}
+              >
+                বাংলা
+              </button>
+            </div>
+            <span className="hidden text-xs text-neutral-500 md:inline">
+              {user?.email} ·{' '}
+              <strong className="capitalize text-[#171717]">
+                {(staffRole || (isAdmin ? 'super_admin' : 'staff')).replace(/_/g, ' ')}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={onBackToPublic}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 py-1.5 text-xs font-semibold text-[#171717] hover:bg-neutral-50 whitespace-nowrap"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {t.backToStorefront}
+            </button>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#171717] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#DC2626] whitespace-nowrap"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{t.signOut}</span>
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">

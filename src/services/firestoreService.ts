@@ -32,6 +32,7 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreError.ts';
 import { computeRecipeDeductions } from '../shared/inventory.ts';
 import { getDhakaDateString } from '../shared/timezone.ts';
 import type {
+  AdminTabId,
   AppNotification,
   AuditLog,
   Category,
@@ -50,6 +51,7 @@ import type {
   ReservationStatus,
   RestaurantTable,
   Review,
+  StaffAccountStatus,
   StaffMember,
   StaffRole,
   StockMovement,
@@ -60,6 +62,50 @@ import { apiRequest, broadcastRealtimeEvent } from './apiClient.ts';
 
 export const BOOTSTRAP_ADMIN_EMAIL = 'mashuksikder121@gmail.com';
 
+export const ALL_ADMIN_TABS: AdminTabId[] = [
+  'overview',
+  'availability',
+  'orders',
+  'kds',
+  'tables',
+  'catalog',
+  'reservations',
+  'inventory',
+  'coupons',
+  'customers',
+  'reports',
+  'settings',
+];
+
+export const DEFAULT_ROLE_PERMISSIONS: Record<StaffRole, AdminTabId[]> = {
+  super_admin: ALL_ADMIN_TABS,
+  manager: [
+    'overview',
+    'availability',
+    'orders',
+    'kds',
+    'tables',
+    'catalog',
+    'reservations',
+    'inventory',
+    'coupons',
+    'reports',
+  ],
+  cashier: ['overview', 'orders', 'tables', 'reservations'],
+  chef: ['availability', 'orders', 'kds', 'inventory'],
+  delivery: ['orders'],
+};
+
+export function emailToStaffDocId(email: string): string {
+  const slug = email
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80);
+  return `staff_${slug || 'member'}`;
+}
+
 export function makeDocId(prefix: string): string {
   const rand = Math.random().toString(36).slice(2, 8);
   return `${prefix}_${Date.now().toString(36)}_${rand}`;
@@ -68,29 +114,61 @@ export function makeDocId(prefix: string): string {
 export async function resolveUserRole(user: User): Promise<{
   isAdmin: boolean;
   staffRole: StaffRole | null;
+  staffPermissions: AdminTabId[];
 }> {
   if (user.email === BOOTSTRAP_ADMIN_EMAIL && user.emailVerified) {
-    return { isAdmin: true, staffRole: 'super_admin' };
+    return {
+      isAdmin: true,
+      staffRole: 'super_admin',
+      staffPermissions: ALL_ADMIN_TABS,
+    };
   }
   try {
     const adminSnap = await getDoc(doc(db, 'admins', user.uid));
     if (adminSnap.exists()) {
-      return { isAdmin: true, staffRole: 'super_admin' };
+      return {
+        isAdmin: true,
+        staffRole: 'super_admin',
+        staffPermissions: ALL_ADMIN_TABS,
+      };
     }
-    const staffSnap = await getDoc(doc(db, 'staff', user.uid));
-    if (staffSnap.exists()) {
-      const data = staffSnap.data() as StaffMember;
-      if (data.isActive) {
-        return {
-          isAdmin: data.role === 'super_admin' || data.role === 'manager',
-          staffRole: data.role,
-        };
+
+    let staffData: StaffMember | null = null;
+    const staffByUidSnap = await getDoc(doc(db, 'staff', user.uid));
+    if (staffByUidSnap.exists()) {
+      staffData = { id: staffByUidSnap.id, ...(staffByUidSnap.data() as StaffMember) };
+    } else if (user.email) {
+      const q = query(
+        collection(db, 'staff'),
+        where('email', '==', user.email.toLowerCase().trim()),
+      );
+      const qSnap = await getDocs(q);
+      if (!qSnap.empty) {
+        const d = qSnap.docs[0];
+        staffData = { id: d.id, ...(d.data() as StaffMember) };
       }
+    }
+
+    if (staffData) {
+      const accountStatus: StaffAccountStatus =
+        staffData.status || (staffData.isActive ? 'active' : 'suspended');
+      if (accountStatus !== 'active' || !staffData.isActive) {
+        return { isAdmin: false, staffRole: null, staffPermissions: [] };
+      }
+      const permissions =
+        Array.isArray(staffData.permissions) && staffData.permissions.length > 0
+          ? staffData.permissions
+          : DEFAULT_ROLE_PERMISSIONS[staffData.role] || [];
+      return {
+        isAdmin: staffData.role === 'super_admin' || staffData.role === 'manager',
+        staffRole: staffData.role,
+        staffPermissions: permissions,
+      };
     }
   } catch {
     // Non-staff user
   }
-  return { isAdmin: false, staffRole: null };
+  return { isAdmin: false, staffRole: null, staffPermissions: [] };
 }
 
 export async function syncUserProfileOnSignIn(user: User): Promise<void> {
@@ -565,7 +643,13 @@ export function subscribeAdminCollections(callbacks: {
   unsubs.push(
     onSnapshot(
       collection(db, 'staff'),
-      (s) => callbacks.onStaff(s.docs.map((d) => d.data() as StaffMember)),
+      (s) =>
+        callbacks.onStaff(
+          s.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as StaffMember),
+          })),
+        ),
       (e) => handleFirestoreError(e, OperationType.LIST, 'staff'),
     ),
   );
@@ -812,6 +896,7 @@ export async function saveProduct(
     price: Number(product.price) || 0,
     discountPrice: product.discountPrice ?? null,
     images: product.images || [],
+    videoUrl: (product.videoUrl || '').slice(0, 500),
     sizes: product.sizes || [],
     addons: product.addons || [],
     isPopular: Boolean(product.isPopular),
@@ -1219,16 +1304,63 @@ export async function moderateReview(
   }
 }
 
-export async function saveStaffMember(member: Omit<StaffMember, 'createdAt' | 'updatedAt'>): Promise<void> {
+export async function fetchRegisteredUsersForAdmin(): Promise<
+  Array<{ uid: string; displayName: string; email: string; photoURL: string }>
+> {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const results = await Promise.all(
+      snap.docs.map(async (uDoc) => {
+        const d = uDoc.data();
+        let email = '';
+        try {
+          const privSnap = await getDoc(doc(db, 'users', uDoc.id, 'private', 'info'));
+          if (privSnap.exists()) {
+            email = String(privSnap.data().email || '');
+          }
+        } catch {
+          // Ignore missing private subdoc
+        }
+        return {
+          uid: uDoc.id,
+          displayName: String(d.displayName || 'Customer'),
+          email,
+          photoURL: String(d.photoURL || ''),
+        };
+      }),
+    );
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+export async function saveStaffMember(
+  member: Omit<StaffMember, 'createdAt' | 'updatedAt'>,
+): Promise<string> {
+  const docId =
+    (member.id || member.uid || '').trim() || emailToStaffDocId(member.email);
+  const status: StaffAccountStatus =
+    member.status || (member.isActive ? 'active' : 'suspended');
+  const permissions =
+    Array.isArray(member.permissions) && member.permissions.length > 0
+      ? member.permissions
+      : DEFAULT_ROLE_PERMISSIONS[member.role] || [];
+
   const payload = {
-    uid: member.uid,
-    email: member.email,
-    name: member.name,
+    uid: (member.uid || '').trim().slice(0, 128),
+    email: member.email.toLowerCase().trim().slice(0, 200),
+    name: member.name.trim().slice(0, 100),
+    phone: (member.phone || '').trim().slice(0, 30),
+    address: (member.address || '').trim().slice(0, 300),
+    photoUrl: (member.photoUrl || '').trim().slice(0, 500),
     role: member.role,
-    isActive: Boolean(member.isActive),
+    status,
+    permissions: status === 'terminated' ? [] : permissions,
+    isActive: status === 'active' && Boolean(member.isActive),
   };
   try {
-    const ref = doc(db, 'staff', member.uid);
+    const ref = doc(db, 'staff', docId);
     const snap = await getDoc(ref);
     if (snap.exists()) {
       await updateDoc(ref, {
@@ -1242,8 +1374,47 @@ export async function saveStaffMember(member: Omit<StaffMember, 'createdAt' | 'u
         updatedAt: serverTimestamp(),
       });
     }
-    await recordAuditLog('SAVE_STAFF', 'staff', member.uid, `${member.name} (${member.role})`);
+    await recordAuditLog(
+      'SAVE_STAFF',
+      'staff',
+      docId,
+      `${payload.name} (${payload.role}, ${status})`,
+    );
+    return docId;
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, `staff/${member.uid}`);
+    handleFirestoreError(err, OperationType.WRITE, `staff/${docId}`);
+  }
+}
+
+export async function terminateStaffMember(staffDocId: string, name: string): Promise<void> {
+  try {
+    await updateDoc(doc(db, 'staff', staffDocId), {
+      status: 'terminated',
+      isActive: false,
+      permissions: [],
+      updatedAt: serverTimestamp(),
+    });
+    await recordAuditLog(
+      'TERMINATE_STAFF',
+      'staff',
+      staffDocId,
+      `Dismissed staff member ${name} from active service`,
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.UPDATE, `staff/${staffDocId}`);
+  }
+}
+
+export async function deleteStaffMember(staffDocId: string, name: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'staff', staffDocId));
+    await recordAuditLog(
+      'DELETE_STAFF',
+      'staff',
+      staffDocId,
+      `Removed staff record for ${name}`,
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `staff/${staffDocId}`);
   }
 }

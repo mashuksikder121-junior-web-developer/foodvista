@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  Banknote,
   CheckCircle2,
   CreditCard,
   MapPin,
@@ -8,6 +9,7 @@ import {
   ShieldCheck,
   Store,
   Truck,
+  Wallet,
   X,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.tsx';
@@ -56,6 +58,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     qrTable,
     verifyAndAttachQrToken,
     showToast,
+    t,
   } = useApp();
 
   const [orderType, setOrderType] = useState<OrderType>(initialOrderType);
@@ -249,7 +252,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       >
         <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
           <div>
-            <h2 className="font-display text-xl font-bold text-[#171717]">Checkout</h2>
+            <h2 className="font-display text-xl font-bold text-[#171717]">{t.checkoutTitle}</h2>
             <p className="text-xs text-neutral-500">
               Live availability & pricing verified in Asia/Dhaka time
             </p>
@@ -278,7 +281,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               onClick={signInWithGoogle}
               className="rounded-xl bg-[#171717] px-4 py-2 text-xs font-semibold text-white hover:bg-[#F97316] whitespace-nowrap shrink-0"
             >
-              Sign in with Google
+              {t.signInGoogleCta}
             </button>
           </div>
         )}
@@ -287,9 +290,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* Order Type */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { id: 'delivery' as const, label: 'Home Delivery', icon: Truck },
-              { id: 'pickup' as const, label: 'Pickup', icon: Store },
-              { id: 'dine_in' as const, label: 'Dine-in (QR)', icon: QrCode },
+              { id: 'delivery' as const, label: t.delivery, icon: Truck },
+              { id: 'pickup' as const, label: t.pickup, icon: Store },
+              { id: 'dine_in' as const, label: t.dineIn, icon: QrCode },
             ].map((opt) => {
               const Icon = opt.icon;
               const active = orderType === opt.id;
@@ -468,46 +471,105 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             />
           </div>
 
-          {/* Payment Method */}
-          <div>
+          {/* Payment Method: Clear Split Between COD & Online Transaction */}
+          <div className="space-y-3">
             <label className="flex items-center gap-1.5 text-xs font-semibold text-[#171717]">
               <CreditCard className="h-3.5 w-3.5 text-[#F97316]" />
-              Payment Method
+              {t.paymentChoiceLabel}
             </label>
-            <div className="mt-2 grid grid-cols-5 gap-2">
-              {(['cash', 'bkash', 'nagad', 'rocket', 'card'] as PaymentMethod[]).map((method) => {
-                const active = paymentMethod === method;
-                return (
-                  <button
-                    key={method}
-                    type="button"
-                    onClick={() => setPaymentMethod(method)}
-                    className={`rounded-xl border py-2.5 text-xs font-semibold uppercase transition-colors ${
-                      active
-                        ? 'border-[#F97316] bg-orange-50 text-[#171717]'
-                        : 'border-neutral-200 text-neutral-600 hover:bg-neutral-50'
-                    }`}
-                  >
-                    {method}
-                  </button>
-                );
-              })}
+
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('cash')}
+                className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
+                  paymentMethod === 'cash'
+                    ? 'border-[#F97316] bg-orange-50 text-[#171717]'
+                    : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                <Banknote
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${
+                    paymentMethod === 'cash' ? 'text-[#F97316]' : 'text-neutral-400'
+                  }`}
+                />
+                <div>
+                  <p className="text-xs font-bold">{t.payCashTitle}</p>
+                  <p className="mt-0.5 text-[11px] text-neutral-500">{t.payCashDesc}</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (paymentMethod === 'cash') setPaymentMethod('bkash');
+                }}
+                className={`flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
+                  paymentMethod !== 'cash'
+                    ? 'border-[#F97316] bg-orange-50 text-[#171717]'
+                    : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                }`}
+              >
+                <Wallet
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${
+                    paymentMethod !== 'cash' ? 'text-[#F97316]' : 'text-neutral-400'
+                  }`}
+                />
+                <div>
+                  <p className="text-xs font-bold">{t.payOnlineTitle}</p>
+                  <p className="mt-0.5 text-[11px] text-neutral-500">{t.payOnlineDesc}</p>
+                </div>
+              </button>
             </div>
 
             {paymentMethod !== 'cash' && (
-              <div className="mt-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3.5">
-                <p className="flex items-center gap-1.5 text-xs text-neutral-600">
-                  <ShieldCheck className="h-4 w-4 text-[#16A34A]" />
-                  Enter your {paymentMethod.toUpperCase()} Transaction / Gateway Reference ID. Never
-                  enter your PIN, OTP, or full card number.
-                </p>
+              <div className="rounded-xl border border-orange-200 bg-[#F8FAFC] p-4 space-y-3">
+                <div className="grid grid-cols-4 gap-2">
+                  {(['bkash', 'nagad', 'rocket', 'card'] as PaymentMethod[]).map((method) => {
+                    const active = paymentMethod === method;
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setPaymentMethod(method)}
+                        className={`rounded-xl border py-2 text-xs font-bold uppercase transition-colors ${
+                          active
+                            ? 'border-[#F97316] bg-[#171717] text-white'
+                            : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+                        }`}
+                      >
+                        {method}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="rounded-lg border border-neutral-200 bg-white p-3 text-xs text-neutral-700">
+                  <p className="font-semibold text-[#171717]">
+                    FoodVista {paymentMethod.toUpperCase()} Merchant Payment
+                  </p>
+                  <p className="mt-1">
+                    Merchant Wallet / Hotline:{' '}
+                    <span className="font-mono font-bold text-[#F97316]">{settings.phone}</span> ·
+                    Amount:{' '}
+                    <span className="font-mono font-bold text-[#171717]">
+                      {formatBDT(totals.totalAmount)}
+                    </span>
+                  </p>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-neutral-500">
+                    <ShieldCheck className="h-4 w-4 shrink-0 text-[#16A34A]" />
+                    Enter only your verified Transaction ID (TrxID). Never enter your PIN, OTP,
+                    CVV, or card number.
+                  </p>
+                </div>
+
                 <input
                   type="text"
                   required
                   value={paymentTxRef}
                   onChange={(e) => setPaymentTxRef(e.target.value)}
-                  placeholder="e.g. TXN8K94LM21"
-                  className="mt-2 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-mono uppercase focus:border-[#F97316] focus:outline-none"
+                  placeholder={`Enter ${paymentMethod.toUpperCase()} TrxID (e.g. TXN8K94LM21)`}
+                  className="w-full rounded-lg border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-mono uppercase focus:border-[#F97316] focus:outline-none"
                 />
               </div>
             )}
@@ -523,7 +585,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           {/* Summary & Confirm */}
           <div className="flex items-center justify-between border-t border-neutral-200 pt-4">
             <div className="tabular-nums">
-              <p className="text-xs text-neutral-500">Final Payable</p>
+              <p className="text-xs text-neutral-500">{t.totalLabel}</p>
               <p className="font-display text-2xl font-bold text-[#171717]">
                 {formatBDT(totals.totalAmount)}
               </p>
@@ -533,7 +595,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               disabled={submitting}
               className="min-h-[46px] rounded-xl bg-[#F97316] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#EA580C] disabled:opacity-60"
             >
-              {submitting ? 'Confirming...' : user ? 'Place Order' : 'Sign In & Place Order'}
+              {submitting ? 'Confirming...' : t.placeOrder}
             </button>
           </div>
         </form>

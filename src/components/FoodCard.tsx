@@ -1,5 +1,6 @@
 import React from 'react';
-import { AlertCircle, Plus } from 'lucide-react';
+import { AlertCircle, Plus, Video } from 'lucide-react';
+import { useApp } from '../contexts/AppContext.tsx';
 import { checkProductAvailability } from '../shared/availability.ts';
 import { formatBDT } from '../shared/timezone.ts';
 import type { Category, FoodAvailability, Product } from '../shared/types.ts';
@@ -20,6 +21,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({
   onSelect,
   onQuickAdd,
 }) => {
+  const { t } = useApp();
   const avail = checkProductAvailability(product, availabilityList);
   const hasDiscount =
     product.discountPrice != null &&
@@ -51,13 +53,19 @@ export const FoodCard: React.FC<FoodCardProps> = ({
           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/75 to-transparent p-3 pt-8">
             <p className="flex items-center gap-1.5 text-xs font-semibold text-red-300">
               <AlertCircle className="h-3.5 w-3.5 shrink-0 text-[#DC2626]" />
-              Unavailable Today
+              {t.unavailableToday}
             </p>
           </div>
         )}
         {avail.available && product.offerLabel && (
           <div className="absolute left-3 top-3 rounded-md bg-[#F97316] px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm">
             {product.offerLabel}
+          </div>
+        )}
+        {product.videoUrl && (
+          <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-md bg-black/80 px-2 py-0.5 text-[11px] font-semibold text-white">
+            <Video className="h-3 w-3 text-[#F97316]" />
+            {t.watchVideo}
           </div>
         )}
       </button>
@@ -120,7 +128,7 @@ export const FoodCard: React.FC<FoodCardProps> = ({
             }`}
           >
             <Plus className="h-3.5 w-3.5" />
-            {avail.available ? 'Add to Cart' : 'Unavailable'}
+            {avail.available ? t.addToCart : t.unavailable}
           </button>
         </div>
       </div>

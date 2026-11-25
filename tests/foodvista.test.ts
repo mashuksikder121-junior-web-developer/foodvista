@@ -16,6 +16,7 @@ import { computeRecipeDeductions } from '../src/shared/inventory.ts';
 import { calculateOrderTotals } from '../src/shared/pricing.ts';
 import { findAvailableTablesForSlot, hasReservationConflict } from '../src/shared/reservations.ts';
 import { formatBDT, getDhakaDateString, isWithinTimeWindow } from '../src/shared/timezone.ts';
+import { TRANSLATIONS } from '../src/shared/i18n.ts';
 import type { Coupon, FoodAvailability, Reservation } from '../src/shared/types.ts';
 
 describe('FoodVista Core Business Logic', () => {
@@ -55,6 +56,17 @@ describe('FoodVista Core Business Logic', () => {
     const chickenAfterHours = checkProductAvailability(chickenBurger, availabilityList, today, '23:45');
     expect(chickenAfterHours.available).toBe(false);
     expect(isWithinTimeWindow('11:00', '23:00', '12:00')).toBe(true);
+  });
+
+  it('maintains complete non-empty English and Bangla translation parity', () => {
+    const enKeys = Object.keys(TRANSLATIONS.en).sort();
+    const bnKeys = Object.keys(TRANSLATIONS.bn).sort();
+    expect(bnKeys).toEqual(enKeys);
+    for (const key of enKeys) {
+      const k = key as keyof typeof TRANSLATIONS.en;
+      expect(TRANSLATIONS.en[k].trim().length).toBeGreaterThan(0);
+      expect(TRANSLATIONS.bn[k].trim().length).toBeGreaterThan(0);
+    }
   });
 
   it('calculates cart totals, discounts, coupons, and Dhaka delivery fees accurately', () => {
@@ -209,6 +221,19 @@ describe('FoodVista Express API Endpoints', () => {
     const data = (await res.json()) as { status: string; timezone: string };
     expect(data.status).toBe('ok');
     expect(data.timezone).toBe('Asia/Dhaka');
+  });
+
+  it('POST /media/upload rejects unauthenticated requests with 401', async () => {
+    const res = await fetch(`${baseUrl}/media/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'burger.png',
+        mimeType: 'image/png',
+        base64Data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB',
+      }),
+    });
+    expect(res.status).toBe(401);
   });
 
   it('POST /orders/calculate rejects unavailable food items with 409', async () => {

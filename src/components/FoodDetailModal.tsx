@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertCircle, Check, Minus, Plus, ShoppingBag, X } from 'lucide-react';
+import { AlertCircle, Check, Image as ImageIcon, Minus, Plus, ShoppingBag, Video, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.tsx';
 import { checkProductAvailability } from '../shared/availability.ts';
 import { calculateItemUnitPrice } from '../shared/pricing.ts';
@@ -13,8 +13,9 @@ interface FoodDetailModalProps {
 }
 
 export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClose }) => {
-  const { availability, categories, addToCart } = useApp();
+  const { availability, categories, addToCart, t } = useApp();
   const [activeImageIdx, setActiveImageIdx] = useState(0);
+  const [mediaMode, setMediaMode] = useState<'photos' | 'video'>('photos');
   const [selectedSize, setSelectedSize] = useState<string | undefined>(
     product?.sizes?.[0]?.name,
   );
@@ -25,6 +26,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
   React.useEffect(() => {
     if (product) {
       setActiveImageIdx(0);
+      setMediaMode('photos');
       setSelectedSize(product.sizes?.[0]?.name);
       setSelectedAddons([]);
       setQuantity(1);
@@ -77,14 +79,53 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
         onClick={(e) => e.stopPropagation()}
       >
         <div className="grid grid-cols-1 md:grid-cols-2">
-          {/* Gallery */}
-          <div className="bg-[#171717] p-4 sm:p-5">
+          {/* Gallery & Dish Video */}
+          <div className="bg-[#171717] p-4 sm:p-5 flex flex-col">
+            {product.videoUrl && (
+              <div className="mb-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMediaMode('photos')}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    mediaMode === 'photos'
+                      ? 'bg-[#F97316] text-white'
+                      : 'bg-neutral-800 text-neutral-300 hover:text-white'
+                  }`}
+                >
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  {t.viewPhotos}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMediaMode('video')}
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    mediaMode === 'video'
+                      ? 'bg-[#F97316] text-white'
+                      : 'bg-neutral-800 text-neutral-300 hover:text-white'
+                  }`}
+                >
+                  <Video className="h-3.5 w-3.5" />
+                  {t.watchVideo}
+                </button>
+              </div>
+            )}
+
             <div className="relative aspect-[4/3] overflow-hidden rounded-xl bg-neutral-900">
-              <FoodImage
-                src={product.images[activeImageIdx] || product.images[0]}
-                alt={product.name}
-                className="h-full w-full object-cover"
-              />
+              {mediaMode === 'video' && product.videoUrl ? (
+                <video
+                  src={product.videoUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full rounded-xl object-cover bg-black"
+                />
+              ) : (
+                <FoodImage
+                  src={product.images[activeImageIdx] || product.images[0]}
+                  alt={product.name}
+                  className="h-full w-full object-cover"
+                />
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -94,7 +135,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {product.images.length > 1 && (
+            {mediaMode === 'photos' && product.images.length > 1 && (
               <div className="mt-3 flex gap-2 overflow-x-auto">
                 {product.images.map((img, idx) => (
                   <button
@@ -162,7 +203,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
             {/* Sizes */}
             {product.sizes && product.sizes.length > 0 && (
               <div className="mt-5">
-                <p className="text-xs font-semibold text-[#171717]">Select Portion Size</p>
+                <p className="text-xs font-semibold text-[#171717]">{t.selectSize}</p>
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   {product.sizes.map((size) => {
                     const active = selectedSize === size.name;
@@ -191,7 +232,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
             {/* Addons */}
             {product.addons && product.addons.length > 0 && (
               <div className="mt-5">
-                <p className="text-xs font-semibold text-[#171717]">Extra Ingredients & Sides</p>
+                <p className="text-xs font-semibold text-[#171717]">{t.extraIngredients}</p>
                 <div className="mt-2 space-y-1.5">
                   {product.addons.map((addon) => {
                     const checked = selectedAddons.some((a) => a.name === addon.name);
@@ -231,7 +272,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
             {/* Kitchen Instructions */}
             <div className="mt-4">
               <label className="text-xs font-semibold text-[#171717]">
-                Special Kitchen Instructions
+                {t.kitchenInstructions}
               </label>
               <input
                 type="text"
@@ -276,7 +317,7 @@ export const FoodDetailModal: React.FC<FoodDetailModalProps> = ({ product, onClo
                 }`}
               >
                 <ShoppingBag className="h-4 w-4" />
-                {avail.available ? `Add to Cart · ${formatBDT(lineTotal)}` : 'Currently Unavailable'}
+                {avail.available ? `${t.addToCart} · ${formatBDT(lineTotal)}` : t.unavailableToday}
               </button>
             </div>
           </div>

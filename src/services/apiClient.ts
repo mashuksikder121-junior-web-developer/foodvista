@@ -54,3 +54,39 @@ export async function broadcastRealtimeEvent(
     // Non-fatal if socket broadcast fails while Firestore listener remains active
   }
 }
+
+export async function uploadMediaFile(
+  file: File,
+): Promise<{ url: string; kind: 'image' | 'video'; sizeBytes: number }> {
+  const allowedMimes = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime',
+  ];
+  if (!allowedMimes.includes(file.type)) {
+    throw new Error('Please upload JPG, PNG, WebP, GIF photos or MP4, WebM, MOV videos.');
+  }
+  if (file.size > 18 * 1024 * 1024) {
+    throw new Error('Media file size must be 18 MB or less.');
+  }
+
+  const base64Data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read file.'));
+    reader.readAsDataURL(file);
+  });
+
+  return apiRequest<{ url: string; kind: 'image' | 'video'; sizeBytes: number }>('/media/upload', {
+    method: 'POST',
+    body: {
+      fileName: file.name,
+      mimeType: file.type,
+      base64Data,
+    },
+  });
+}

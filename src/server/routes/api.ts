@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Router } from 'express';
 import QRCode from 'qrcode';
 import type { Server as SocketIOServer } from 'socket.io';
@@ -83,6 +85,30 @@ const broadcastSchema = z.object({
     'catalog:updated',
   ]),
   payload: z.record(z.string(), z.unknown()),
+});
+
+const MIME_EXT_MAP: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+};
+
+const mediaUploadSchema = z.object({
+  fileName: z.string().min(1).max(120),
+  mimeType: z.enum([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'video/mp4',
+    'video/webm',
+    'video/quicktime',
+  ]),
+  base64Data: z.string().min(8).max(26_000_000),
 });
 
 export function createApiRouter(io: SocketIOServer): Router {
@@ -295,6 +321,45 @@ export function createApiRouter(io: SocketIOServer): Router {
       emittedAt: new Date().toISOString(),
     });
     res.json({ broadcasted: true });
+  });
+
+  // Food photo & video upload endpoint (authenticated staff/admin)
+  router.post('/media/upload', requireAuth, strictLimiter, async (req: AuthRequest, res) => {
+    const parsed = mediaUploadSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        error: 'Unsupported media file. Upload JPG/PNG/WebP/GIF images or MP4/WebM/MOV videos.',
+      });
+      return;
+    }
+
+    const { mimeType, base64Data } = parsed.data;
+    const ext = MIME_EXT_MAP[mimeType];
+    if (!ext) {
+      res.status(400).json({ error: 'Unsupported media MIME type.' });
+      return;
+    }
+
+    const stripped = base64Data.includes(',') ? base64Data.split(',')[1] || '' : base64Data;
+    const buffer = Buffer.from(stripped, 'base64');
+    if (buffer.length === 0 || buffer.length > 18 * 1024 * 1024) {
+      res.status(400).json({ error: 'File must be between 1 byte and 18 MB.' });
+      return;
+    }
+
+    try {
+      const uploadsDir = path.resolve(process.cwd(), 'public/uploads');
+      await fs.mkdir(uploadsDir, { recursive: true });
+      const safeName = `fv_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
+      await fs.writeFile(path.join(uploadsDir, safeName), buffer);
+      res.json({
+        url: `/uploads/${safeName}`,
+        kind: mimeType.startsWith('video/') ? 'video' : 'image',
+        sizeBytes: buffer.length,
+      });
+    } catch {
+      res.status(500).json({ error: 'Failed to store uploaded media file.' });
+    }
   });
 
   // Documented modular route endpoints for REST inspection & readiness

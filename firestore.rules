@@ -44,7 +44,9 @@ service cloud.firestore {
     function isStaffActive() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.isActive == true;
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.isActive == true &&
+        (!('status' in get(/databases/$(database)/documents/staff/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.status == 'active');
     }
 
     function staffRole() {
@@ -88,7 +90,7 @@ service cloud.firestore {
       return data.keys().hasAll(['categoryId', 'name', 'slug', 'description', 'price', 'images', 'isActive', 'isDeleted', 'createdAt', 'updatedAt'])
         && data.keys().hasOnly([
           'categoryId', 'name', 'slug', 'description', 'price', 'discountPrice',
-          'images', 'sizes', 'addons', 'isPopular', 'isBestSeller', 'isFeatured',
+          'images', 'videoUrl', 'sizes', 'addons', 'isPopular', 'isBestSeller', 'isFeatured',
           'isOffer', 'offerLabel', 'prepTimeMins', 'isActive', 'isDeleted',
           'createdAt', 'updatedAt'
         ])
@@ -101,6 +103,7 @@ service cloud.firestore {
         && (!('discountPrice' in data) || data.discountPrice == null || (data.discountPrice is number && data.discountPrice >= 0 && data.discountPrice <= data.price))
         && data.images is list && data.images.size() <= 6
         && (data.images.size() == 0 || (data.images[0] is string && data.images[0].size() <= 500))
+        && isOptStr(data, 'videoUrl', 500)
         && (!('sizes' in data) || (data.sizes is list && data.sizes.size() <= 8 && (data.sizes.size() == 0 || data.sizes[0] is map)))
         && (!('addons' in data) || (data.addons is list && data.addons.size() <= 12 && (data.addons.size() == 0 || data.addons[0] is map)))
         && (!('isPopular' in data) || data.isPopular is bool)
@@ -181,13 +184,18 @@ service cloud.firestore {
         && data.createdAt is timestamp;
     }
 
-    function isValidStaff(data, uid) {
-      return data.keys().hasAll(['uid', 'email', 'name', 'role', 'isActive', 'createdAt', 'updatedAt'])
-        && data.keys().hasOnly(['uid', 'email', 'name', 'role', 'isActive', 'createdAt', 'updatedAt'])
-        && data.uid == uid
+    function isValidStaff(data) {
+      return data.keys().hasAll(['email', 'name', 'role', 'isActive', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'name', 'phone', 'address', 'photoUrl', 'role', 'status', 'permissions', 'isActive', 'createdAt', 'updatedAt'])
+        && isOptStr(data, 'uid', 128)
         && isStr(data.email, 3, 200)
         && isStr(data.name, 1, 100)
+        && isOptStr(data, 'phone', 30)
+        && isOptStr(data, 'address', 300)
+        && isOptStr(data, 'photoUrl', 500)
         && data.role in ['super_admin', 'manager', 'cashier', 'chef', 'delivery']
+        && (!('status' in data) || data.status in ['active', 'suspended', 'terminated'])
+        && (!('permissions' in data) || (data.permissions is list && data.permissions.size() <= 16 && (data.permissions.size() == 0 || data.permissions[0] is string)))
         && data.isActive is bool
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -515,14 +523,18 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin() && isValidId(uid);
     }
 
-    match /staff/{uid} {
-      allow get: if isValidId(uid) && (isOwner(uid) || isManagerOrAdmin());
-      allow list: if isBootstrapAdmin();
-      allow create: if isAdmin() && isValidId(uid) && isValidStaff(incoming(), uid)
+    match /staff/{staffId} {
+      allow get: if isValidId(staffId) && (
+        isOwner(staffId) ||
+        (isSignedIn() && existing().email == request.auth.token.email) ||
+        isManagerOrAdmin()
+      );
+      allow list: if isBootstrapAdmin() || (isSignedIn() && resource.data.email == request.auth.token.email);
+      allow create: if isAdmin() && isValidId(staffId) && isValidStaff(incoming())
         && incoming().createdAt == request.time && incoming().updatedAt == request.time;
-      allow update: if isAdmin() && isValidId(uid) && isValidStaff(incoming(), uid)
+      allow update: if isAdmin() && isValidId(staffId) && isValidStaff(incoming())
         && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time;
-      allow delete: if isAdmin() && isValidId(uid);
+      allow delete: if isAdmin() && isValidId(staffId);
     }
 
     match /orders/{orderId} {

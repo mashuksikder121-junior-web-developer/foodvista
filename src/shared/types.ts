@@ -53,6 +53,7 @@ export interface Product {
   price: number;
   discountPrice?: number | null;
   images: string[];
+  videoUrl?: string;
   sizes?: ProductSize[];
   addons?: ProductAddon[];
   isPopular?: boolean;
@@ -278,11 +279,33 @@ export interface AuditLog {
   createdAt?: unknown;
 }
 
+export type AdminTabId =
+  | 'overview'
+  | 'availability'
+  | 'orders'
+  | 'kds'
+  | 'tables'
+  | 'catalog'
+  | 'reservations'
+  | 'inventory'
+  | 'coupons'
+  | 'customers'
+  | 'reports'
+  | 'settings';
+
+export type StaffAccountStatus = 'active' | 'suspended' | 'terminated';
+
 export interface StaffMember {
+  id?: string;
   uid: string;
   email: string;
   name: string;
+  phone?: string;
+  address?: string;
+  photoUrl?: string;
   role: StaffRole;
+  status?: StaffAccountStatus;
+  permissions?: AdminTabId[];
   isActive: boolean;
   createdAt?: unknown;
   updatedAt?: unknown;
