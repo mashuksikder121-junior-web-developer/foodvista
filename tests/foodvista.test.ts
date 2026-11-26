@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -191,8 +194,11 @@ describe('FoodVista Core Business Logic', () => {
 describe('FoodVista Express API Endpoints', () => {
   let baseUrl = '';
   let server: ReturnType<typeof createServer>;
+  let tempStorePath = '';
 
   beforeAll(async () => {
+    tempStorePath = path.join(os.tmpdir(), `foodvista-demo-test-${Date.now()}.json`);
+    process.env.DEMO_STORE_PATH = tempStorePath;
     const app = express();
     app.use(express.json());
     const httpServer = createServer(app);
@@ -213,6 +219,10 @@ describe('FoodVista Express API Endpoints', () => {
 
   afterAll(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    delete process.env.DEMO_STORE_PATH;
+    if (tempStorePath) {
+      await fs.rm(tempStorePath, { force: true }).catch(() => undefined);
+    }
   });
 
   it('GET /health reports Asia/Dhaka timezone and ok status', async () => {
@@ -315,5 +325,68 @@ describe('FoodVista Express API Endpoints', () => {
       body: JSON.stringify(payload),
     });
     expect(ok.status).toBe(200);
+  });
+
+  it('allows instant demo sign up with any email/password and enforces password on returning login', async () => {
+    const email = 'customer@demo.test';
+    const password = 'my-secret-password-99';
+
+    // 1. First sign up succeeds without email verification
+    const signupRes = await fetch(`${baseUrl}/demo-auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, displayName: 'Karim' }),
+    });
+    expect(signupRes.status).toBe(201);
+    const signupJson = (await signupRes.json()) as {
+      token: string;
+      user: { uid: string; email: string; displayName: string };
+    };
+    expect(signupJson.token.startsWith('fvdemo.')).toBe(true);
+    expect(signupJson.user.email).toBe(email);
+    expect(signupJson.user.displayName).toBe('Karim');
+
+    // 2. Duplicate sign-up attempt for the same email is rejected with 409
+    const dupRes = await fetch(`${baseUrl}/demo-auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'another-password' }),
+    });
+    expect(dupRes.status).toBe(409);
+
+    // 3. Returning login with wrong password fails with 401
+    const wrongPassRes = await fetch(`${baseUrl}/demo-auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: 'wrong-password' }),
+    });
+    expect(wrongPassRes.status).toBe(401);
+
+    // 4. Returning login with exact password succeeds with 200
+    const loginRes = await fetch(`${baseUrl}/demo-auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    expect(loginRes.status).toBe(200);
+    const loginJson = (await loginRes.json()) as { token: string; user: { uid: string } };
+    expect(loginJson.token.startsWith('fvdemo.')).toBe(true);
+
+    // 5. Authenticated /demo-auth/me returns profile
+    const meRes = await fetch(`${baseUrl}/demo-auth/me`, {
+      headers: { Authorization: `Bearer ${loginJson.token}` },
+    });
+    expect(meRes.status).toBe(200);
+
+    // 6. Demo customer payment verify & order creation works cleanly
+    const payRes = await fetch(`${baseUrl}/payments/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${loginJson.token}`,
+      },
+      body: JSON.stringify({ method: 'cash', amount: 500 }),
+    });
+    expect(payRes.status).toBe(200);
   });
 });

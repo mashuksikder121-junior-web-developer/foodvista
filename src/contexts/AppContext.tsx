@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
 import { io, type Socket } from 'socket.io-client';
 import {
@@ -10,9 +10,20 @@ import {
   getDefaultAvailability,
 } from '../data/seedDefaults.ts';
 import { auth, googleAuthProvider } from '../lib/firebase.ts';
-import { apiRequest } from '../services/apiClient.ts';
 import {
+  apiRequest,
+  getStoredDemoToken,
+  setStoredDemoToken,
+} from '../services/apiClient.ts';
+import {
+  cancelPendingOrder,
+  cancelReservation,
+  createOrder,
+  createReservation,
+  deleteCustomerAddress,
+  getUserPrivateProfile,
   resolveUserRole,
+  saveCustomerAddress,
   seedInitialDatabaseIfEmpty,
   subscribeAllOrders,
   subscribeAllReservations,
@@ -25,7 +36,9 @@ import {
   subscribeUserAddresses,
   subscribeUserOrders,
   subscribeUserReservations,
+  submitCustomerReview,
   syncUserProfileOnSignIn,
+  updateUserProfileInfo,
 } from '../services/firestoreService.ts';
 import { speakWelcomeGreeting } from '../services/welcomeAudio.ts';
 import { TRANSLATIONS, type Language, type TranslationSet } from '../shared/i18n.ts';
@@ -46,6 +59,19 @@ import type {
   WebsiteSetting,
 } from '../shared/types.ts';
 
+export interface DemoSessionProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: null;
+  emailVerified: false;
+  phone: string;
+  defaultAddress: string;
+  isDemo: true;
+}
+
+export type AppAuthUser = User | DemoSessionProfile;
+
 export interface QrTableContext {
   tableId: string;
   tableNumber: string;
@@ -61,12 +87,16 @@ export interface ToastMessage {
 }
 
 interface AppContextValue {
-  user: User | null;
+  user: AppAuthUser | null;
+  firebaseUser: User | null;
+  isDemoUser: boolean;
   authReady: boolean;
   isAdmin: boolean;
   staffRole: StaffRole | null;
   staffPermissions: AdminTabId[];
   signInWithGoogle: () => Promise<void>;
+  signUpDemo: (params: { email: string; password: string; displayName?: string }) => Promise<void>;
+  signInDemo: (params: { email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   replayWelcomeAudio: () => void;
 
@@ -84,6 +114,35 @@ interface AppContextValue {
   orders: Order[];
   reservations: Reservation[];
   addresses: CustomerAddress[];
+  demoAdminReviews: Review[];
+
+  // Unified customer operations (works for both Demo & Google accounts)
+  loadProfileDetails: () => Promise<{ phone: string; defaultAddress: string } | null>;
+  saveProfileInfo: (data: {
+    displayName: string;
+    phone: string;
+    defaultAddress: string;
+  }) => Promise<void>;
+  addCustomerAddress: (
+    address: Omit<CustomerAddress, 'id' | 'userId' | 'createdAt'>,
+  ) => Promise<void>;
+  removeCustomerAddress: (addressId: string) => Promise<void>;
+  placeCustomerOrder: (
+    payload: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>,
+  ) => Promise<Order>;
+  cancelCustomerOrder: (orderId: string) => Promise<void>;
+  submitCustomerReservation: (
+    payload: Omit<Reservation, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
+  ) => Promise<string>;
+  cancelCustomerReservation: (reservationId: string) => Promise<void>;
+  submitReview: (payload: {
+    authorName: string;
+    productId?: string;
+    productName?: string;
+    rating: number;
+    comment: string;
+  }) => Promise<void>;
+  refreshDemoAdminSnapshot: () => Promise<void>;
 
   cart: CartItem[];
   addToCart: (params: {
@@ -113,8 +172,11 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [demoUser, setDemoUser] = useState<DemoSessionProfile | null>(null);
+  const [firebaseReady, setFirebaseReady] = useState(false);
+  const [demoReady, setDemoReady] = useState(false);
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
   const [staffPermissions, setStaffPermissions] = useState<AdminTabId[]>([]);
@@ -141,10 +203,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dbAvailability, setDbAvailability] = useState<FoodAvailability[]>([]);
   const [dbTables, setDbTables] = useState<RestaurantTable[]>([]);
   const [dbReviews, setDbReviews] = useState<Review[]>([]);
+  const [demoApprovedReviews, setDemoApprovedReviews] = useState<Review[]>([]);
 
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [fsOrders, setFsOrders] = useState<Order[]>([]);
+  const [fsReservations, setFsReservations] = useState<Reservation[]>([]);
+  const [fsAddresses, setFsAddresses] = useState<CustomerAddress[]>([]);
+
+  const [demoOrders, setDemoOrders] = useState<Order[]>([]);
+  const [demoReservations, setDemoReservations] = useState<Reservation[]>([]);
+  const [demoAddresses, setDemoAddresses] = useState<CustomerAddress[]>([]);
+
+  const [demoAdminOrders, setDemoAdminOrders] = useState<Order[]>([]);
+  const [demoAdminReservations, setDemoAdminReservations] = useState<Reservation[]>([]);
+  const [demoAdminReviews, setDemoAdminReviews] = useState<Review[]>([]);
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
@@ -176,14 +247,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
+  const authReady = firebaseReady && demoReady;
+  const user: AppAuthUser | null = firebaseUser || demoUser;
+  const isDemoUser = Boolean(!firebaseUser && demoUser);
+
+  // Admin role strictly requires a verified Firebase Google login
   const isBootstrapAdmin = Boolean(
-    user && user.email === 'mashuksikder121@gmail.com' && user.emailVerified,
+    firebaseUser &&
+      firebaseUser.email === 'mashuksikder121@gmail.com' &&
+      firebaseUser.emailVerified,
   );
 
-  // Auth listener
+  // Restore Demo Session on load
+  useEffect(() => {
+    const token = getStoredDemoToken();
+    if (!token) {
+      setDemoReady(true);
+      return;
+    }
+    apiRequest<{
+      user: {
+        uid: string;
+        email: string;
+        displayName: string;
+        phone: string;
+        defaultAddress: string;
+      };
+    }>('/demo-auth/me')
+      .then((res) => {
+        setDemoUser({
+          ...res.user,
+          photoURL: null,
+          emailVerified: false,
+          isDemo: true,
+        });
+      })
+      .catch(() => {
+        setStoredDemoToken(null);
+        setDemoUser(null);
+      })
+      .finally(() => {
+        setDemoReady(true);
+      });
+  }, []);
+
+  // Firebase Auth listener
   useEffect(() => {
     return onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
+      setFirebaseUser(currentUser);
       if (currentUser) {
         try {
           const roleInfo = await resolveUserRole(currentUser);
@@ -209,11 +320,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setStaffRole(null);
         setStaffPermissions([]);
       }
-      setAuthReady(true);
+      setFirebaseReady(true);
     });
   }, []);
 
-  // Public real-time Firestore listeners
+  const refreshDemoCustomerData = useCallback(async () => {
+    if (!getStoredDemoToken() || auth.currentUser) {
+      setDemoOrders([]);
+      setDemoReservations([]);
+      setDemoAddresses([]);
+      return;
+    }
+    try {
+      const data = await apiRequest<{
+        orders: Order[];
+        reservations: Reservation[];
+        addresses: CustomerAddress[];
+        profile: {
+          uid: string;
+          email: string;
+          displayName: string;
+          phone: string;
+          defaultAddress: string;
+        } | null;
+      }>('/demo-customer/data');
+      setDemoOrders(data.orders || []);
+      setDemoReservations(data.reservations || []);
+      setDemoAddresses(data.addresses || []);
+      if (data.profile) {
+        setDemoUser({
+          ...data.profile,
+          photoURL: null,
+          emailVerified: false,
+          isDemo: true,
+        });
+      }
+    } catch {
+      // Ignore if session expired
+    }
+  }, []);
+
+  const refreshDemoAdminSnapshot = useCallback(async () => {
+    if (!isBootstrapAdmin) {
+      setDemoAdminOrders([]);
+      setDemoAdminReservations([]);
+      setDemoAdminReviews([]);
+      return;
+    }
+    try {
+      const snap = await apiRequest<{
+        orders: Order[];
+        reservations: Reservation[];
+        reviews: Review[];
+      }>('/demo-customer/admin/snapshot');
+      setDemoAdminOrders(snap.orders || []);
+      setDemoAdminReservations(snap.reservations || []);
+      setDemoAdminReviews(snap.reviews || []);
+    } catch {
+      // Non-fatal
+    }
+  }, [isBootstrapAdmin]);
+
+  // Public real-time Firestore listeners + approved demo reviews
   useEffect(() => {
     const unsubs = [
       subscribeSettings(setDbSettings),
@@ -223,29 +391,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subscribeTables(setDbTables),
       subscribeApprovedReviews(setDbReviews),
     ];
+    apiRequest<{ reviews: Review[] }>('/demo-customer/reviews/approved')
+      .then((res) => setDemoApprovedReviews(res.reviews || []))
+      .catch(() => undefined);
     return () => unsubs.forEach((u) => u());
   }, []);
 
   // User / Admin orders & reservations listeners
   useEffect(() => {
-    if (!authReady || !user) {
-      setOrders([]);
-      setReservations([]);
-      setAddresses([]);
-      return;
+    if (!authReady) return;
+
+    if (firebaseUser) {
+      const unsubs = [
+        isBootstrapAdmin
+          ? subscribeAllOrders(setFsOrders)
+          : subscribeUserOrders(firebaseUser.uid, setFsOrders),
+        isBootstrapAdmin
+          ? subscribeAllReservations(setFsReservations)
+          : subscribeUserReservations(firebaseUser.uid, setFsReservations),
+        subscribeUserAddresses(firebaseUser.uid, setFsAddresses),
+      ];
+      if (isBootstrapAdmin) {
+        void refreshDemoAdminSnapshot();
+      }
+      return () => unsubs.forEach((u) => u());
     }
 
-    const unsubs = [
-      isBootstrapAdmin ? subscribeAllOrders(setOrders) : subscribeUserOrders(user.uid, setOrders),
-      isBootstrapAdmin
-        ? subscribeAllReservations(setReservations)
-        : subscribeUserReservations(user.uid, setReservations),
-      subscribeUserAddresses(user.uid, setAddresses),
-    ];
-    return () => unsubs.forEach((u) => u());
-  }, [authReady, user, isBootstrapAdmin]);
+    setFsOrders([]);
+    setFsReservations([]);
+    setFsAddresses([]);
+    setDemoAdminOrders([]);
+    setDemoAdminReservations([]);
+    setDemoAdminReviews([]);
 
-  // Real-time Socket.IO listener for instant cross-device notifications
+    if (demoUser) {
+      void refreshDemoCustomerData();
+    } else {
+      setDemoOrders([]);
+      setDemoReservations([]);
+      setDemoAddresses([]);
+    }
+  }, [
+    authReady,
+    firebaseUser,
+    demoUser?.uid,
+    isBootstrapAdmin,
+    refreshDemoCustomerData,
+    refreshDemoAdminSnapshot,
+  ]);
+
+  // Real-time Socket.IO listener for instant cross-device notifications & demo sync
   useEffect(() => {
     const socket: Socket = io({
       transports: ['websocket', 'polling'],
@@ -258,12 +453,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'info',
         );
       }
+      if (isBootstrapAdmin) void refreshDemoAdminSnapshot();
+      if (isDemoUser) void refreshDemoCustomerData();
     });
 
     socket.on('order:updated', (data: { status?: string }) => {
       if (data.status) {
         showToast(`Order status updated to ${data.status.replace(/_/g, ' ')}`, 'info');
       }
+      if (isBootstrapAdmin) void refreshDemoAdminSnapshot();
+      if (isDemoUser) void refreshDemoCustomerData();
+    });
+
+    socket.on('reservation:updated', () => {
+      if (isBootstrapAdmin) void refreshDemoAdminSnapshot();
+      if (isDemoUser) void refreshDemoCustomerData();
     });
 
     socket.on('availability:updated', () => {
@@ -275,7 +479,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       socket.disconnect();
     };
-  }, [isAdmin]);
+  }, [isAdmin, isBootstrapAdmin, isDemoUser, refreshDemoAdminSnapshot, refreshDemoCustomerData]);
 
   const settings = useMemo(() => dbSettings || DEFAULT_WEBSITE_SETTINGS, [dbSettings]);
   const categories = useMemo(
@@ -291,9 +495,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return getDefaultAvailability(getDhakaDateString());
   }, [dbAvailability]);
   const tables = useMemo(() => (dbTables.length > 0 ? dbTables : DEFAULT_TABLES), [dbTables]);
-  const approvedReviews = useMemo(
-    () => (dbReviews.length > 0 ? dbReviews : DEFAULT_REVIEWS),
-    [dbReviews],
+
+  const approvedReviews = useMemo(() => {
+    const base = dbReviews.length > 0 ? dbReviews : DEFAULT_REVIEWS;
+    return [...demoApprovedReviews, ...base];
+  }, [dbReviews, demoApprovedReviews]);
+
+  const orders = useMemo(() => {
+    if (firebaseUser) {
+      return isBootstrapAdmin ? [...demoAdminOrders, ...fsOrders] : fsOrders;
+    }
+    return demoOrders;
+  }, [firebaseUser, isBootstrapAdmin, demoAdminOrders, fsOrders, demoOrders]);
+
+  const reservations = useMemo(() => {
+    if (firebaseUser) {
+      return isBootstrapAdmin ? [...demoAdminReservations, ...fsReservations] : fsReservations;
+    }
+    return demoReservations;
+  }, [firebaseUser, isBootstrapAdmin, demoAdminReservations, fsReservations, demoReservations]);
+
+  const addresses = useMemo(
+    () => (firebaseUser ? fsAddresses : demoAddresses),
+    [firebaseUser, fsAddresses, demoAddresses],
   );
 
   // Verify QR Token from URL (?table_qr=...)
@@ -310,17 +534,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      const res = await apiRequest<{ valid: boolean; tableId: string; version: number; reason?: string }>(
-        '/table-qr/verify',
-        {
-          method: 'POST',
-          body: {
-            token,
-            expectedSignature: matchingTable.qrSignature,
-            expectedVersion: matchingTable.qrTokenVersion,
-          },
+      const res = await apiRequest<{
+        valid: boolean;
+        tableId: string;
+        version: number;
+        reason?: string;
+      }>('/table-qr/verify', {
+        method: 'POST',
+        body: {
+          token,
+          expectedSignature: matchingTable.qrSignature,
+          expectedVersion: matchingTable.qrTokenVersion,
         },
-      );
+      });
       if (res.valid) {
         setQrTable({
           tableId: matchingTable.id,
@@ -366,8 +592,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const signInWithGoogle = async () => {
     try {
       const cred = await signInWithPopup(auth, googleAuthProvider);
-      const guestName =
-        cred.user.displayName || cred.user.email?.split('@')[0] || 'Guest';
+      // Clear demo session if switching to Google account
+      setStoredDemoToken(null);
+      setDemoUser(null);
+      const guestName = cred.user.displayName || cred.user.email?.split('@')[0] || 'Guest';
       speakWelcomeGreeting(guestName, lang);
       showToast(`${guestName}, welcome to our FoodVista!`, 'success');
     } catch (err) {
@@ -376,9 +604,218 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const signUpDemo = async (params: {
+    email: string;
+    password: string;
+    displayName?: string;
+  }) => {
+    const res = await apiRequest<{
+      token: string;
+      user: {
+        uid: string;
+        email: string;
+        displayName: string;
+        phone: string;
+        defaultAddress: string;
+      };
+    }>('/demo-auth/signup', {
+      method: 'POST',
+      body: params,
+    });
+    if (auth.currentUser) {
+      await signOut(auth);
+    }
+    setStoredDemoToken(res.token);
+    setDemoUser({
+      ...res.user,
+      photoURL: null,
+      emailVerified: false,
+      isDemo: true,
+    });
+    const guestName = res.user.displayName || res.user.email.split('@')[0] || 'Guest';
+    speakWelcomeGreeting(guestName, lang);
+    showToast(`${guestName}, welcome to our FoodVista!`, 'success');
+  };
+
+  const signInDemo = async (params: { email: string; password: string }) => {
+    const res = await apiRequest<{
+      token: string;
+      user: {
+        uid: string;
+        email: string;
+        displayName: string;
+        phone: string;
+        defaultAddress: string;
+      };
+    }>('/demo-auth/login', {
+      method: 'POST',
+      body: params,
+    });
+    if (auth.currentUser) {
+      await signOut(auth);
+    }
+    setStoredDemoToken(res.token);
+    setDemoUser({
+      ...res.user,
+      photoURL: null,
+      emailVerified: false,
+      isDemo: true,
+    });
+    const guestName = res.user.displayName || res.user.email.split('@')[0] || 'Guest';
+    speakWelcomeGreeting(guestName, lang);
+    showToast(`${guestName}, welcome to our FoodVista!`, 'success');
+  };
+
   const logout = async () => {
-    await signOut(auth);
+    setStoredDemoToken(null);
+    setDemoUser(null);
+    setDemoOrders([]);
+    setDemoReservations([]);
+    setDemoAddresses([]);
+    if (auth.currentUser) {
+      await signOut(auth);
+    }
     showToast('Signed out.', 'info');
+  };
+
+  // Unified customer operations
+  const loadProfileDetails = async () => {
+    if (firebaseUser) {
+      const priv = await getUserPrivateProfile(firebaseUser.uid);
+      return priv ? { phone: priv.phone || '', defaultAddress: priv.defaultAddress || '' } : null;
+    }
+    if (demoUser) {
+      return { phone: demoUser.phone || '', defaultAddress: demoUser.defaultAddress || '' };
+    }
+    return null;
+  };
+
+  const saveProfileInfo = async (data: {
+    displayName: string;
+    phone: string;
+    defaultAddress: string;
+  }) => {
+    if (firebaseUser) {
+      await updateUserProfileInfo(firebaseUser.uid, data);
+      return;
+    }
+    if (demoUser) {
+      const res = await apiRequest<{
+        profile: {
+          uid: string;
+          email: string;
+          displayName: string;
+          phone: string;
+          defaultAddress: string;
+        };
+      }>('/demo-customer/profile', {
+        method: 'PUT',
+        body: data,
+      });
+      if (res.profile) {
+        setDemoUser({ ...res.profile, photoURL: null, emailVerified: false, isDemo: true });
+      }
+    }
+  };
+
+  const addCustomerAddress = async (
+    address: Omit<CustomerAddress, 'id' | 'userId' | 'createdAt'>,
+  ) => {
+    if (firebaseUser) {
+      await saveCustomerAddress(firebaseUser.uid, address);
+      return;
+    }
+    if (demoUser) {
+      const res = await apiRequest<{ address: CustomerAddress }>('/demo-customer/addresses', {
+        method: 'POST',
+        body: address,
+      });
+      setDemoAddresses((prev) => [res.address, ...prev]);
+    }
+  };
+
+  const removeCustomerAddress = async (addressId: string) => {
+    if (firebaseUser) {
+      await deleteCustomerAddress(firebaseUser.uid, addressId);
+      return;
+    }
+    if (demoUser) {
+      await apiRequest(`/demo-customer/addresses/${addressId}`, { method: 'DELETE' });
+      setDemoAddresses((prev) => prev.filter((a) => a.id !== addressId));
+    }
+  };
+
+  const placeCustomerOrder = async (
+    payload: Omit<Order, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<Order> => {
+    if (firebaseUser) {
+      return createOrder(payload);
+    }
+    const res = await apiRequest<{ order: Order }>('/demo-customer/orders', {
+      method: 'POST',
+      body: payload,
+    });
+    setDemoOrders((prev) => [res.order, ...prev]);
+    return res.order;
+  };
+
+  const cancelCustomerOrder = async (orderId: string) => {
+    if (firebaseUser && !orderId.startsWith('demo_ord_')) {
+      await cancelPendingOrder(orderId);
+      return;
+    }
+    const res = await apiRequest<{ order: Order }>(`/demo-customer/orders/${orderId}/cancel`, {
+      method: 'POST',
+    });
+    setDemoOrders((prev) => prev.map((o) => (o.id === orderId ? res.order : o)));
+  };
+
+  const submitCustomerReservation = async (
+    payload: Omit<Reservation, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
+  ): Promise<string> => {
+    if (firebaseUser) {
+      return createReservation(payload);
+    }
+    const res = await apiRequest<{ reservation: Reservation }>('/demo-customer/reservations', {
+      method: 'POST',
+      body: payload,
+    });
+    setDemoReservations((prev) => [res.reservation, ...prev]);
+    return res.reservation.id;
+  };
+
+  const cancelCustomerReservation = async (reservationId: string) => {
+    if (firebaseUser && !reservationId.startsWith('demo_res_')) {
+      await cancelReservation(reservationId);
+      return;
+    }
+    const res = await apiRequest<{ reservation: Reservation }>(
+      `/demo-customer/reservations/${reservationId}/cancel`,
+      { method: 'POST' },
+    );
+    setDemoReservations((prev) =>
+      prev.map((r) => (r.id === reservationId ? res.reservation : r)),
+    );
+  };
+
+  const submitReview = async (payload: {
+    authorName: string;
+    productId?: string;
+    productName?: string;
+    rating: number;
+    comment: string;
+  }) => {
+    if (firebaseUser) {
+      await submitCustomerReview({
+        userId: firebaseUser.uid,
+        ...payload,
+      });
+      return;
+    }
+    await apiRequest('/demo-customer/reviews', {
+      method: 'POST',
+      body: payload,
+    });
   };
 
   const addToCart: AppContextValue['addToCart'] = ({
@@ -445,11 +882,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         user,
+        firebaseUser,
+        isDemoUser,
         authReady,
         isAdmin,
         staffRole,
         staffPermissions,
         signInWithGoogle,
+        signUpDemo,
+        signInDemo,
         logout,
         replayWelcomeAudio,
         lang,
@@ -464,6 +905,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orders,
         reservations,
         addresses,
+        demoAdminReviews,
+        loadProfileDetails,
+        saveProfileInfo,
+        addCustomerAddress,
+        removeCustomerAddress,
+        placeCustomerOrder,
+        cancelCustomerOrder,
+        submitCustomerReservation,
+        cancelCustomerReservation,
+        submitReview,
+        refreshDemoAdminSnapshot,
         cart,
         addToCart,
         updateCartQty,

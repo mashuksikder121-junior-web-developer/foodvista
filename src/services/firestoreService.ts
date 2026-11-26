@@ -1047,6 +1047,18 @@ export async function updateOrderWorkflow(params: {
   paymentStatus?: PaymentStatus;
   recipes?: Recipe[];
 }): Promise<void> {
+  if (params.orderId.startsWith('demo_ord_')) {
+    await apiRequest(`/demo-customer/admin/orders/${params.orderId}`, {
+      method: 'PATCH',
+      body: {
+        status: params.status,
+        kitchenStatus: params.kitchenStatus,
+        paymentStatus: params.paymentStatus,
+      },
+    });
+    return;
+  }
+
   const uid = auth.currentUser?.uid || 'staff';
   const orderRef = doc(db, 'orders', params.orderId);
 
@@ -1144,6 +1156,14 @@ export async function updateReservationStatus(
   reservationId: string,
   status: ReservationStatus,
 ): Promise<void> {
+  if (reservationId.startsWith('demo_res_')) {
+    await apiRequest(`/demo-customer/admin/reservations/${reservationId}`, {
+      method: 'PATCH',
+      body: { status },
+    });
+    return;
+  }
+
   try {
     await updateDoc(doc(db, 'reservations', reservationId), {
       status,
@@ -1292,6 +1312,14 @@ export async function moderateReview(
   status: 'approved' | 'hidden',
   adminReply: string,
 ): Promise<void> {
+  if (reviewId.startsWith('demo_rev_')) {
+    await apiRequest(`/demo-customer/admin/reviews/${reviewId}`, {
+      method: 'PATCH',
+      body: { status, adminReply },
+    });
+    return;
+  }
+
   try {
     await updateDoc(doc(db, 'reviews', reviewId), {
       status,

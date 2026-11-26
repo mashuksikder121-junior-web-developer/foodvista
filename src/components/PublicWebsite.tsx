@@ -23,16 +23,6 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.tsx';
-import {
-  cancelPendingOrder,
-  cancelReservation,
-  createReservation,
-  deleteCustomerAddress,
-  getUserPrivateProfile,
-  saveCustomerAddress,
-  submitCustomerReview,
-  updateUserProfileInfo,
-} from '../services/firestoreService.ts';
 import { checkProductAvailability } from '../shared/availability.ts';
 import { findAvailableTablesForSlot } from '../shared/reservations.ts';
 import { formatBDT, getDhakaDateString } from '../shared/timezone.ts';
@@ -69,6 +59,14 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
     staffRole,
     signInWithGoogle,
     logout,
+    loadProfileDetails,
+    saveProfileInfo,
+    addCustomerAddress,
+    removeCustomerAddress,
+    cancelCustomerOrder,
+    submitCustomerReservation,
+    cancelCustomerReservation,
+    submitReview,
     settings,
     categories,
     products,
@@ -140,7 +138,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
     if (user) {
       setProfileName(user.displayName || '');
       setResName((prev) => prev || user.displayName || '');
-      void getUserPrivateProfile(user.uid).then((priv) => {
+      void loadProfileDetails().then((priv) => {
         if (priv) {
           setProfilePhone(priv.phone || '');
           setProfileAddr(priv.defaultAddress || '');
@@ -218,7 +216,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
     }
     setResSubmitting(true);
     try {
-      await createReservation({
+      await submitCustomerReservation({
         userId: user.uid,
         customerName: resName.trim(),
         customerPhone: resPhone.trim(),
@@ -241,7 +239,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    await updateUserProfileInfo(user.uid, {
+    await saveProfileInfo({
       displayName: profileName,
       phone: profilePhone,
       defaultAddress: profileAddr,
@@ -256,7 +254,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
       showToast('Enter a valid street address and phone number.', 'error');
       return;
     }
-    await saveCustomerAddress(user.uid, {
+    await addCustomerAddress({
       label: newAddrLabel.trim() || 'Home',
       recipientName: profileName || user.displayName || 'Customer',
       phone: newAddrPhone.trim(),
@@ -280,8 +278,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
       return;
     }
     const prod = products.find((p) => p.id === reviewProductId);
-    await submitCustomerReview({
-      userId: user.uid,
+    await submitReview({
       authorName: profileName || user.displayName || 'Guest',
       productId: prod?.id || '',
       productName: prod?.name || '',
@@ -993,7 +990,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                         {(r.status === 'pending' || r.status === 'confirmed') && (
                           <button
                             type="button"
-                            onClick={() => void cancelReservation(r.id)}
+                            onClick={() => void cancelCustomerReservation(r.id)}
                             className="mt-2 text-xs font-semibold text-[#DC2626] hover:underline"
                           >
                             Cancel Booking
@@ -1145,7 +1142,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                     <div className="mt-4 border-t border-neutral-100 pt-4 text-right">
                       <button
                         type="button"
-                        onClick={() => void cancelPendingOrder(activeOrder.id)}
+                        onClick={() => void cancelCustomerOrder(activeOrder.id)}
                         className="rounded-xl border border-red-200 px-4 py-2 text-xs font-semibold text-[#DC2626] hover:bg-red-50"
                       >
                         Cancel Pending Order
@@ -1288,7 +1285,7 @@ export const PublicWebsite: React.FC<PublicWebsiteProps> = ({ onOpenAdmin }) => 
                           </div>
                           <button
                             type="button"
-                            onClick={() => void deleteCustomerAddress(user.uid, a.id)}
+                            onClick={() => void removeCustomerAddress(a.id)}
                             className="text-neutral-400 hover:text-[#DC2626]"
                           >
                             <Trash2 className="h-4 w-4" />

@@ -5,6 +5,18 @@ export interface TranslationSet {
   signInBadge: string;
   signInHeading: string;
   signInSubheading: string;
+  signUpTab: string;
+  signInTab: string;
+  nameOptionalLabel: string;
+  namePlaceholder: string;
+  emailLabel: string;
+  emailPlaceholder: string;
+  passwordLabel: string;
+  passwordPlaceholder: string;
+  signUpCta: string;
+  signInPasswordCta: string;
+  demoSignUpNote: string;
+  orContinueGoogle: string;
   signInGoogleCta: string;
   signInSecurityNote: string;
   signInHighlight1: string;
@@ -87,9 +99,21 @@ export const TRANSLATIONS: Record<Language, TranslationSet> = {
     signInBadge: 'Welcome to FoodVista Bangladesh',
     signInHeading: 'Freshly Crafted Flavors, Ready to Order',
     signInSubheading:
-      'Sign in with Google to browse our live daily menu, watch dish videos, order for home delivery or QR dine-in, and reserve your table.',
+      'Create an instant demo account with any email and password (no email verification needed). Returning users sign in with the same password.',
+    signUpTab: 'Demo Sign Up',
+    signInTab: 'Sign In',
+    nameOptionalLabel: 'Your Name (Optional)',
+    namePlaceholder: 'e.g. Tariq Hasan',
+    emailLabel: 'Email Address',
+    emailPlaceholder: 'you@example.com',
+    passwordLabel: 'Password',
+    passwordPlaceholder: 'Create or enter your password',
+    signUpCta: 'Sign Up & Enter FoodVista',
+    signInPasswordCta: 'Sign In with Password',
+    demoSignUpNote: 'Instant entry with any email & password · Returning login checks this password',
+    orContinueGoogle: 'Or continue with Google',
     signInGoogleCta: 'Sign in with Google',
-    signInSecurityNote: 'Passwordless Google Sign-In · Instant audio welcome on entry',
+    signInSecurityNote: 'No email verification required · Instant audio welcome on entry',
     signInHighlight1: 'Home Delivery & Cash on Delivery',
     signInHighlight2: 'Instant Online bKash / Nagad / Card Pay',
     signInHighlight3: 'Live Dish Photos & Cooking Videos',
@@ -162,9 +186,21 @@ export const TRANSLATIONS: Record<Language, TranslationSet> = {
     signInBadge: 'ফুডভিস্টা বাংলাদেশে স্বাগতম',
     signInHeading: 'টাটকা ও সুস্বাদু খাবার, এখনই অর্ডার করুন',
     signInSubheading:
-      'আমাদের লাইভ মেনু দেখতে, খাবারের ভিডিও দেখতে, হোম ডেলিভারি বা QR ডাইন-ইন অর্ডার করতে এবং টেবিল বুক করতে গুগল দিয়ে সাইন ইন করুন।',
+      'কোনো ইমেইল ভেরিফিকেশন ছাড়াই যেকোনো ইমেইল ও পাসওয়ার্ড দিয়ে তাৎক্ষণিক ডেমো সাইন আপ করুন। পরে আবার ঢুকতে চাইলে সেই পাসওয়ার্ড দিয়েই লগইন করতে হবে।',
+    signUpTab: 'ডেমো সাইন আপ',
+    signInTab: 'সাইন ইন',
+    nameOptionalLabel: 'আপনার নাম (ঐচ্ছিক)',
+    namePlaceholder: 'যেমন: তারিক হাসান',
+    emailLabel: 'ইমেইল ঠিকানা',
+    emailPlaceholder: 'you@example.com',
+    passwordLabel: 'পাসওয়ার্ড',
+    passwordPlaceholder: 'পাসওয়ার্ড লিখুন',
+    signUpCta: 'সাইন আপ করে প্রবেশ করুন',
+    signInPasswordCta: 'পাসওয়ার্ড দিয়ে সাইন ইন করুন',
+    demoSignUpNote: 'যেকোনো ইমেইল ও পাসওয়ার্ডেই সাইন আপ হবে · পরে লগইনে এই পাসওয়ার্ড লাগবে',
+    orContinueGoogle: 'অথবা গুগল দিয়ে প্রবেশ করুন',
     signInGoogleCta: 'গুগল দিয়ে সাইন ইন করুন',
-    signInSecurityNote: 'পাসওয়ার্ড ছাড়াই নিরাপদ গুগল সাইন-ইন · লগইনে অডিও স্বাগতম',
+    signInSecurityNote: 'ইমেইল ভেরিফিকেশন ছাড়াই প্রবেশ · লগইনে অডিও স্বাগতম',
     signInHighlight1: 'হোম ডেলিভারি ও ক্যাশ অন ডেলিভারি সুবিধা',
     signInHighlight2: 'বিকাশ / নগদ / রকেট / কার্ড অনলাইন পেমেন্ট',
     signInHighlight3: 'প্রতিটি খাবারের ছবি ও ভিডিও দেখার সুবিধা',

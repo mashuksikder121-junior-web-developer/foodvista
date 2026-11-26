@@ -1,5 +1,21 @@
 import { auth } from '../lib/firebase.ts';
 
+const DEMO_TOKEN_KEY = 'foodvista_demo_token';
+
+export function getStoredDemoToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(DEMO_TOKEN_KEY);
+}
+
+export function setStoredDemoToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (token) {
+    window.localStorage.setItem(DEMO_TOKEN_KEY, token);
+  } else {
+    window.localStorage.removeItem(DEMO_TOKEN_KEY);
+  }
+}
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -7,6 +23,11 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (auth.currentUser) {
     const token = await auth.currentUser.getIdToken();
     headers.Authorization = `Bearer ${token}`;
+  } else {
+    const demoToken = getStoredDemoToken();
+    if (demoToken) {
+      headers.Authorization = `Bearer ${demoToken}`;
+    }
   }
   return headers;
 }
@@ -45,7 +66,7 @@ export async function broadcastRealtimeEvent(
   payload: Record<string, unknown>,
 ) {
   try {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser && !getStoredDemoToken()) return;
     await apiRequest('/events/broadcast', {
       method: 'POST',
       body: { event, payload },

@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
 import {
+  AlertCircle,
   CheckCircle2,
   Clock,
+  Eye,
+  EyeOff,
   Globe,
+  Lock,
   LogIn,
+  Mail,
   MapPin,
   QrCode,
   ShieldCheck,
+  User as UserIcon,
+  UserPlus,
   Volume2,
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.tsx';
@@ -14,15 +21,72 @@ import { FOOD_IMAGES } from '../data/seedDefaults.ts';
 import { FoodImage } from './FoodImage.tsx';
 
 export const SignInGate: React.FC = () => {
-  const { settings, signInWithGoogle, lang, setLang, t, qrTable } = useApp();
-  const [signingIn, setSigningIn] = useState(false);
+  const { settings, signUpDemo, signInDemo, signInWithGoogle, lang, setLang, t, qrTable } =
+    useApp();
+
+  const [mode, setMode] = useState<'signup' | 'signin'>('signup');
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      setErrorMsg(
+        lang === 'bn'
+          ? 'অনুগ্রহ করে একটি সঠিক ইমেইল ঠিকানা দিন।'
+          : 'Please enter a valid email address.',
+      );
+      return;
+    }
+    if (!password) {
+      setErrorMsg(
+        lang === 'bn' ? 'অনুগ্রহ করে একটি পাসওয়ার্ড দিন।' : 'Please enter a password.',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (mode === 'signup') {
+        await signUpDemo({
+          email: cleanEmail,
+          password,
+          displayName: displayName.trim() || undefined,
+        });
+      } else {
+        await signInDemo({
+          email: cleanEmail,
+          password,
+        });
+      }
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : lang === 'bn'
+            ? 'প্রবেশ করা সম্ভব হয়নি। আবার চেষ্টা করুন।'
+            : 'Authentication failed. Please try again.';
+      setErrorMsg(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleGoogleLogin = async () => {
-    setSigningIn(true);
+    setErrorMsg(null);
+    setGoogleLoading(true);
     try {
       await signInWithGoogle();
     } finally {
-      setSigningIn(false);
+      setGoogleLoading(false);
     }
   };
 
@@ -67,57 +131,188 @@ export const SignInGate: React.FC = () => {
       </header>
 
       {/* Main Centered Split Showcase */}
-      <main className="mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-10 sm:px-6">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 items-center px-4 py-8 sm:px-6">
         <div className="grid w-full grid-cols-1 items-stretch gap-8 lg:grid-cols-12">
-          {/* Left: Sign-In Card */}
-          <div className="flex flex-col justify-center rounded-3xl border border-neutral-800 bg-white p-7 text-[#171717] shadow-2xl sm:p-10 lg:col-span-6">
+          {/* Left: Demo Sign-Up / Sign-In Card */}
+          <div className="flex flex-col justify-center rounded-3xl border border-neutral-800 bg-white p-7 text-[#171717] shadow-2xl sm:p-9 lg:col-span-6">
             <p className="text-xs font-bold uppercase tracking-wider text-[#F97316]">
               {t.signInBadge}
             </p>
 
-            <h1 className="mt-3 font-display text-3xl font-extrabold leading-tight tracking-tight text-[#171717] sm:text-4xl">
+            <h1 className="mt-2 font-display text-2xl font-extrabold leading-tight tracking-tight text-[#171717] sm:text-3xl">
               {t.signInHeading}
             </h1>
 
-            <p className="mt-3 text-sm leading-relaxed text-neutral-600">{t.signInSubheading}</p>
+            <p className="mt-2 text-xs leading-relaxed text-neutral-600 sm:text-sm">
+              {t.signInSubheading}
+            </p>
 
             {qrTable && qrTable.verified && (
-              <div className="mt-5 flex items-center gap-2.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-xs font-semibold text-[#171717]">
+              <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-xs font-semibold text-[#171717]">
                 <QrCode className="h-4 w-4 shrink-0 text-[#F97316]" />
                 <span>
-                  Table {qrTable.tableNumber} ({qrTable.zone}) detected — sign in to start ordering
-                  for your table.
+                  Table {qrTable.tableNumber} ({qrTable.zone}) detected — sign up or sign in to
+                  order for your table.
                 </span>
               </div>
             )}
 
-            <ul className="mt-6 space-y-2.5 text-sm text-neutral-700">
+            {/* Mode Switcher Tabs: Demo Sign Up vs Returning Sign In */}
+            <div className="mt-5 grid grid-cols-2 rounded-2xl border border-neutral-200 bg-neutral-100 p-1 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup');
+                  setErrorMsg(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 transition-all ${
+                  mode === 'signup'
+                    ? 'bg-[#171717] text-white shadow-sm'
+                    : 'text-neutral-600 hover:text-[#171717]'
+                }`}
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                {t.signUpTab}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signin');
+                  setErrorMsg(null);
+                }}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 transition-all ${
+                  mode === 'signin'
+                    ? 'bg-[#171717] text-white shadow-sm'
+                    : 'text-neutral-600 hover:text-[#171717]'
+                }`}
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                {t.signInTab}
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="mt-4 space-y-3.5">
+              {mode === 'signup' && (
+                <div>
+                  <label className="text-xs font-semibold text-neutral-700">
+                    {t.nameOptionalLabel}
+                  </label>
+                  <div className="relative mt-1">
+                    <UserIcon className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder={t.namePlaceholder}
+                      maxLength={80}
+                      className="w-full rounded-xl border border-neutral-200 bg-[#F8FAFC] py-2.5 pl-10 pr-3.5 text-sm text-[#171717] placeholder:text-neutral-400 focus:border-[#F97316] focus:bg-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs font-semibold text-neutral-700">{t.emailLabel}</label>
+                <div className="relative mt-1">
+                  <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={t.emailPlaceholder}
+                    autoComplete="email"
+                    className="w-full rounded-xl border border-neutral-200 bg-[#F8FAFC] py-2.5 pl-10 pr-3.5 text-sm text-[#171717] placeholder:text-neutral-400 focus:border-[#F97316] focus:bg-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-neutral-700">{t.passwordLabel}</label>
+                <div className="relative mt-1">
+                  <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={t.passwordPlaceholder}
+                    autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                    className="w-full rounded-xl border border-neutral-200 bg-[#F8FAFC] py-2.5 pl-10 pr-10 text-sm text-[#171717] placeholder:text-neutral-400 focus:border-[#F97316] focus:bg-white focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-[#171717]"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <p className="mt-1 text-[11px] text-neutral-500">{t.demoSignUpNote}</p>
+              </div>
+
+              {errorMsg && (
+                <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-[#DC2626]">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#F97316] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition-colors hover:bg-[#EA580C] disabled:opacity-60"
+              >
+                {mode === 'signup' ? (
+                  <UserPlus className="h-4 w-4" />
+                ) : (
+                  <LogIn className="h-4 w-4" />
+                )}
+                {submitting
+                  ? '...'
+                  : mode === 'signup'
+                    ? t.signUpCta
+                    : t.signInPasswordCta}
+              </button>
+            </form>
+
+            {/* Optional Google Sign-In Divider */}
+            <div className="my-4 flex items-center gap-3">
+              <div className="h-px flex-1 bg-neutral-200" />
+              <span className="text-[11px] font-medium text-neutral-400">
+                {t.orContinueGoogle}
+              </span>
+              <div className="h-px flex-1 bg-neutral-200" />
+            </div>
+
+            <button
+              type="button"
+              disabled={googleLoading}
+              onClick={() => void handleGoogleLogin()}
+              className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-xs font-bold text-[#171717] transition-colors hover:border-[#171717] hover:bg-neutral-50 disabled:opacity-60"
+            >
+              <LogIn className="h-4 w-4 text-[#F97316]" />
+              {googleLoading ? '...' : t.signInGoogleCta}
+            </button>
+
+            <div className="mt-5 grid grid-cols-2 gap-2 border-t border-neutral-100 pt-4 text-[11px] text-neutral-600">
               {[
                 t.signInHighlight1,
                 t.signInHighlight2,
                 t.signInHighlight3,
                 t.signInHighlight4,
               ].map((item) => (
-                <li key={item} className="flex items-center gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-[#16A34A]" />
+                <div key={item} className="flex items-start gap-1.5">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#16A34A]" />
                   <span>{item}</span>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
 
-            <button
-              type="button"
-              disabled={signingIn}
-              onClick={() => void handleGoogleLogin()}
-              className="mt-8 flex min-h-[52px] w-full items-center justify-center gap-3 rounded-2xl bg-[#F97316] px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-orange-500/20 transition-colors hover:bg-[#EA580C] disabled:opacity-60"
-            >
-              <LogIn className="h-5 w-5" />
-              {signingIn ? '...' : t.signInGoogleCta}
-            </button>
-
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+            <div className="mt-3 flex items-center justify-between text-[11px] text-neutral-500">
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-[#16A34A]" />
+                <ShieldCheck className="h-3.5 w-3.5 text-[#16A34A]" />
                 {t.signInSecurityNote}
               </span>
               <Volume2 className="h-4 w-4 text-[#F97316]" />

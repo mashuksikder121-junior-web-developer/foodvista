@@ -78,6 +78,7 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
 }) => {
   const {
     user,
+    firebaseUser,
     isAdmin,
     staffRole,
     staffPermissions,
@@ -86,6 +87,7 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
     reservations,
     tables,
     products,
+    demoAdminReviews,
     lang,
     setLang,
     t,
@@ -103,7 +105,9 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const isBootstrapAdmin = Boolean(
-    user && user.email === 'mashuksikder121@gmail.com' && user.emailVerified,
+    firebaseUser &&
+      firebaseUser.email === 'mashuksikder121@gmail.com' &&
+      firebaseUser.emailVerified,
   );
 
   const visibleNavItems = useMemo(
@@ -439,7 +443,10 @@ export const AdminDashboard: React.FC<{ onBackToPublic: () => void }> = ({
             />
           )}
           {activeTab === 'coupons' && (
-            <AdminCouponsAndReviewsTab coupons={coupons} reviews={allReviews} />
+            <AdminCouponsAndReviewsTab
+              coupons={coupons}
+              reviews={[...demoAdminReviews, ...allReviews]}
+            />
           )}
           {activeTab === 'customers' && <AdminCustomersAndStaffTab staff={staff} />}
           {activeTab === 'reports' && (

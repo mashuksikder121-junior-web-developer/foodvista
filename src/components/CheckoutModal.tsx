@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext.tsx';
 import { apiRequest } from '../services/apiClient.ts';
-import { createOrder, getUserPrivateProfile } from '../services/firestoreService.ts';
 import { calculateItemUnitPrice, calculateOrderTotals } from '../shared/pricing.ts';
 import { formatBDT } from '../shared/timezone.ts';
 import type { Coupon, OrderType, PaymentMethod } from '../shared/types.ts';
@@ -49,6 +48,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const {
     user,
     signInWithGoogle,
+    placeCustomerOrder,
+    loadProfileDetails,
     cart,
     clearCart,
     products,
@@ -81,7 +82,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   useEffect(() => {
     if (user) {
       setCustomerName((prev) => prev || user.displayName || '');
-      void getUserPrivateProfile(user.uid).then((priv) => {
+      void loadProfileDetails().then((priv) => {
         if (priv) {
           setCustomerPhone((prev) => prev || priv.phone || '');
           setDeliveryAddress((prev) => prev || priv.defaultAddress || '');
@@ -202,7 +203,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       });
 
       const orderNumber = `FV-${Date.now().toString().slice(-6)}`;
-      const created = await createOrder({
+      const created = await placeCustomerOrder({
         orderNumber,
         userId: user.uid,
         customerName: customerName.trim(),
